@@ -7,7 +7,7 @@
  */
 export function AppFooter() {
   return (
-    <footer className="mt-auto border-t bg-card/60">
+    <footer className="mt-auto mb-20 border-t bg-card/60 md:mb-0">
       <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-center gap-1.5 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-[11px] text-muted-foreground sm:flex-row sm:justify-between md:px-6">
         <span className="flex items-center gap-1.5">
           <span className="relative flex size-1.5" aria-hidden="true">

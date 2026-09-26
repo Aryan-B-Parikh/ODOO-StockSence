@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import { deltaColor, fmtPct, fmtQty, fmtSignedQty, fmtUSD, timeAgo, titleCase } from '@/lib/format'
+import { generateQrSvg } from '@/lib/qr-matrix'
 import type { LedgerListDTO, ProductDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/ui-store'
@@ -108,31 +109,46 @@ export function ProductDetailDialog({
 
         {product && status && (
           <div className="space-y-5">
-            {/* Header */}
+            {/* Header with SKU QR badge */}
             <DialogHeader className="space-y-2">
-              <DialogTitle asChild>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-xs font-medium">
-                    {product.sku}
-                  </span>
-                  <span className="text-lg font-semibold tracking-tight">{product.name}</span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <DialogTitle asChild>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-xs font-medium">
+                        {product.sku}
+                      </span>
+                      <span className="text-lg font-semibold tracking-tight">{product.name}</span>
+                    </div>
+                  </DialogTitle>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusBadge status={status.status} label={status.label} />
+                    <span className="rounded-md border border-stone-500/30 bg-stone-500/10 px-2 py-0.5 text-xs font-medium text-stone-600 dark:text-stone-300">
+                      {product.category}
+                    </span>
+                    <span className="rounded-md border border-teal-500/30 bg-teal-500/10 px-2 py-0.5 text-xs font-medium text-teal-700 dark:text-teal-400">
+                      {product.valueClass} value
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {fmtUSD(product.unitCost, 2)} / {product.unit}
+                    </span>
+                  </div>
+                  {product.notes && (
+                    <p className="text-sm italic text-muted-foreground">{product.notes}</p>
+                  )}
                 </div>
-              </DialogTitle>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <StatusBadge status={status.status} label={status.label} />
-                <span className="rounded-md border border-stone-500/30 bg-stone-500/10 px-2 py-0.5 text-xs font-medium text-stone-600 dark:text-stone-300">
-                  {product.category}
-                </span>
-                <span className="rounded-md border border-teal-500/30 bg-teal-500/10 px-2 py-0.5 text-xs font-medium text-teal-700 dark:text-teal-400">
-                  {product.valueClass} value
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {fmtUSD(product.unitCost, 2)} / {product.unit}
-                </span>
+
+                {/* Scannable Product SKU QR Badge */}
+                <div
+                  className="size-14 shrink-0 rounded-lg border bg-white p-1 shadow-xs ring-1 ring-border/50"
+                  role="img"
+                  aria-label={`QR Code for SKU ${product.sku}`}
+                  title={`Scan to open SKU: ${product.sku}`}
+                  dangerouslySetInnerHTML={{
+                    __html: generateQrSvg(product.sku, { margin: 1 }),
+                  }}
+                />
               </div>
-              {product.notes && (
-                <p className="text-sm italic text-muted-foreground">{product.notes}</p>
-              )}
             </DialogHeader>
 
             {/* Quantity cards — Available is the hero card */}

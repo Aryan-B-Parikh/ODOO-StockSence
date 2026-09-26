@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils'
 import type { ProductListDTO } from '@/lib/types'
 
 import { AppFooter } from './footer'
+import { MobileBottomNav } from './mobile-bottom-nav'
+import { MobileInstallBanner } from './mobile-install-banner'
 import { OfflineBanner } from './offline-banner'
 import { PinLockGate } from './pin-lock'
 import { Sidebar } from './sidebar'
@@ -20,8 +22,8 @@ import { Topbar } from './topbar'
 
 /**
  * Authenticated application shell.
- * Desktop: sticky sidebar rail (w-60) + main column. Mobile: topbar with a
- * hamburger that opens a Sheet containing the same navigation.
+ * Desktop: sticky sidebar rail (w-60) + main column.
+ * Mobile: topbar + mobile bottom tab bar (Home, Ops, elevated Scan, Stock, More).
  * Sticky-footer rule: root is min-h-screen flex flex-col, footer has mt-auto.
  *
  * `app-chrome` marks everything that hides when printing a count sheet
@@ -74,11 +76,13 @@ export function AppShell() {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
+          <MobileInstallBanner />
           <OfflineBanner />
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 md:px-6 md:py-6">
+          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 pb-8 md:px-6 md:py-6">
             <ActiveView />
           </main>
           <AppFooter />
+          <MobileBottomNav />
         </div>
       </div>
       {locked && <PinLockGate />}

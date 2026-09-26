@@ -6,13 +6,13 @@ import { createPortal } from 'react-dom'
 
 import { api } from '@/lib/api'
 import { fmtDate } from '@/lib/format'
-import { generateQrMatrix, QR_SIZE } from '@/lib/qr-matrix'
+import { generateQrSvg } from '@/lib/qr-matrix'
 import type { MetaDTO } from '@/lib/types'
 
 /**
  * Printable QR rack/shelf labels (Phase 2: "print QR stickers that map to the
  * zone/rack/shelf hierarchy"). One self-adhesive-style label per shelf
- * location: deterministic QR matrix + hierarchy text, laid out as a cut-here
+ * location: standard ISO QR vector SVG + hierarchy text, laid out as a cut-here
  * grid. Invisible on screen; pure black-on-white on paper (print.css).
  */
 
@@ -20,14 +20,14 @@ type MetaLocation = MetaDTO['locations'][number]
 
 /** One cut-here label — QR matrix left, hierarchy text right. */
 function RackLabel({ location }: { location: MetaLocation }) {
-  const matrix = generateQrMatrix(location.fullPath)
+  const svg = generateQrSvg(location.fullPath, { margin: 1 })
   return (
     <div className="ps-label">
-      <div className="ps-label-qr" aria-hidden="true">
-        {matrix.map((on, i) => (
-          <span key={i} className={on ? 'ps-qr-on' : 'ps-qr-off'} />
-        ))}
-      </div>
+      <div
+        className="ps-label-qr"
+        aria-hidden="true"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
       <div className="ps-label-text">
         <div className="ps-label-zone">{location.zoneName}</div>
         <div className="ps-label-rack">

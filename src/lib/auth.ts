@@ -82,11 +82,11 @@ export async function requirePermission(action: PermissionAction): Promise<Sessi
   return user
 }
 
-export function sessionCookieOptions(expiresAt: Date) {
+export function sessionCookieOptions(expiresAt: Date, isSecure?: boolean) {
   return {
     httpOnly: true,
     sameSite: 'lax' as const,
-    secure: false,
+    secure: isSecure ?? (process.env.NODE_ENV === 'production'),
     path: '/',
     expires: expiresAt,
   }

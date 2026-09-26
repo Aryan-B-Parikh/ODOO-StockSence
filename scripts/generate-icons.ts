@@ -1,0 +1,129 @@
+import fs from 'fs';
+import path from 'path';
+import sharp from 'sharp';
+
+const ICONS_DIR = path.join(__dirname, '../public/icons');
+if (!fs.existsSync(ICONS_DIR)) {
+  fs.mkdirSync(ICONS_DIR, { recursive: true });
+}
+
+// Crisp SVG of the StockSense mobile app icon
+const svgContent = `
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#091310" />
+      <stop offset="50%" stop-color="#0f211b" />
+      <stop offset="100%" stop-color="#050a08" />
+    </linearGradient>
+    <linearGradient id="boxTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="boxLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="boxRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#064e3b" />
+    </linearGradient>
+    <linearGradient id="laserGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0" />
+      <stop offset="50%" stop-color="#6ee7b7" stop-opacity="1" />
+      <stop offset="100%" stop-color="#34d399" stop-opacity="0" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded squircle -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <rect x="4" y="4" width="504" height="504" rx="108" stroke="#10b981" stroke-opacity="0.25" stroke-width="6"/>
+
+  <!-- Subtle ambient glow -->
+  <circle cx="256" cy="256" r="140" fill="#10b981" fill-opacity="0.15" filter="url(#glow)"/>
+
+  <!-- Warehouse Iso Box Container -->
+  <!-- Top Face -->
+  <polygon points="256,128 368,192 256,256 144,192" fill="url(#boxTop)"/>
+  
+  <!-- Left Face -->
+  <polygon points="144,192 256,256 256,384 144,320" fill="url(#boxLeft)"/>
+  
+  <!-- Right Face -->
+  <polygon points="256,256 368,192 368,320 256,384" fill="url(#boxRight)"/>
+
+  <!-- Inner Seam Lines -->
+  <path d="M256,256 L256,384" stroke="#047857" stroke-width="4" stroke-linecap="round"/>
+  <path d="M144,192 L256,256 L368,192" stroke="#059669" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- Warehouse Barcode Scan Laser Beam -->
+  <line x1="112" y1="256" x2="400" y2="256" stroke="url(#laserGrad)" stroke-width="8" filter="url(#glow)"/>
+  <line x1="112" y1="256" x2="400" y2="256" stroke="#ffffff" stroke-width="2"/>
+
+  <!-- Scanning sensor dots -->
+  <circle cx="144" cy="192" r="6" fill="#34d399" />
+  <circle cx="368" cy="192" r="6" fill="#34d399" />
+  <circle cx="256" cy="384" r="6" fill="#34d399" />
+
+  <!-- Logistics Stock Badge indicator -->
+  <rect x="232" y="152" width="48" height="24" rx="6" fill="#047857" fill-opacity="0.6"/>
+  <line x1="240" y1="164" x2="272" y2="164" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+</svg>
+`;
+
+async function generate() {
+  const svgBuffer = Buffer.from(svgContent.trim());
+
+  // Save base SVG
+  fs.writeFileSync(path.join(ICONS_DIR, 'icon.svg'), svgBuffer);
+
+  // Generate 512x512
+  await sharp(svgBuffer)
+    .resize(512, 512)
+    .png()
+    .toFile(path.join(ICONS_DIR, 'icon-512x512.png'));
+  console.log('Created icon-512x512.png');
+
+  // Generate 192x192
+  await sharp(svgBuffer)
+    .resize(192, 192)
+    .png()
+    .toFile(path.join(ICONS_DIR, 'icon-192x192.png'));
+  console.log('Created icon-192x192.png');
+
+  // Generate apple-touch-icon (180x180)
+  await sharp(svgBuffer)
+    .resize(180, 180)
+    .png()
+    .toFile(path.join(ICONS_DIR, 'apple-touch-icon.png'));
+  console.log('Created apple-touch-icon.png');
+
+  // Generate maskable icons with padding for Android Adaptive Icons
+  const maskableSvg = `
+  <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="512" height="512" fill="#091310"/>
+    <g transform="translate(64, 64) scale(0.75)">
+      ${svgContent.replace(/<\/?svg[^>]*>/g, '')}
+    </g>
+  </svg>
+  `;
+  const maskableBuffer = Buffer.from(maskableSvg.trim());
+
+  await sharp(maskableBuffer)
+    .resize(512, 512)
+    .png()
+    .toFile(path.join(ICONS_DIR, 'icon-maskable-512x512.png'));
+  console.log('Created icon-maskable-512x512.png');
+
+  await sharp(maskableBuffer)
+    .resize(192, 192)
+    .png()
+    .toFile(path.join(ICONS_DIR, 'icon-maskable-192x192.png'));
+  console.log('Created icon-maskable-192x192.png');
+}
+
+generate().catch(console.error);

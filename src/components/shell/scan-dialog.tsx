@@ -7,6 +7,8 @@ import {
   ArrowUpRight,
   Camera,
   CameraOff,
+  FlipHorizontal,
+  Image as ImageIcon,
   Keyboard,
   MapPin,
   Package,
@@ -47,8 +49,40 @@ type ScanResult =
 
 type CameraState = 'starting' | 'live' | 'unavailable'
 
-/** Decode interval for the camera loop — fast enough to feel live, cheap enough for a tablet. */
-const DECODE_INTERVAL_MS = 250
+/** Decode interval for the camera loop — snappy 180ms feels instant. */
+const DECODE_INTERVAL_MS = 180
+
+function playScanChime() {
+  try {
+    const AudioContextClass =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextClass) return
+    const ctx = new AudioContextClass()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, ctx.currentTime)
+    osc.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.08)
+    gain.gain.setValueAtTime(0.15, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.09)
+  } catch {
+    // Ignore audio permission/context errors
+  }
+}
+
+function triggerHaptic() {
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([40, 50, 40])
+    }
+  } catch {
+    // Ignore
+  }
+}
 
 /**
  * Global scan dialog (Phase 2 — barcode/QR scan input with a guaranteed
@@ -82,10 +116,12 @@ export function ScanDialog() {
   const [result, setResult] = useState<ScanResult | null>(null)
   const [camState, setCamState] = useState<CameraState>('starting')
   const [cameraNonce, setCameraNonce] = useState(0)
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const manualInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── Data (locations + product SKUs for the resolver) ─────────────────────
   const metaQ = useQuery({
@@ -212,6 +248,45 @@ export function ScanDialog() {
     resolveRef.current = handleResolve
   }, [handleResolve])
 
+  // ── File upload QR scanner (fallback if camera blocked or using stored photo) ──
+  const handleImageFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const img = new window.Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const maxDim = 1200
+        const longest = Math.max(img.width, img.height, 1)
+        const scale = Math.min(1, maxDim / longest)
+        const w = Math.max(1, Math.round(img.width * scale))
+        const h = Math.max(1, Math.round(img.height * scale))
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        ctx.drawImage(img, 0, 0, w, h)
+        try {
+          const imgData = ctx.getImageData(0, 0, w, h)
+          const code = jsQR(imgData.data, w, h, { inversionAttempts: 'attemptBoth' })
+          if (code?.data) {
+            playScanChime()
+            triggerHaptic()
+            resolveRef.current(code.data)
+          } else {
+            toast.warning('No QR code found in this photo — try taking a closer, clearer picture.')
+          }
+        } catch {
+          toast.error("Couldn't process the photo file.")
+        }
+      }
+      img.src = event.target?.result as string
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }, [])
+
   // ── Camera tab (getUserMedia → canvas → jsQR) ─────────────────────────────
   useEffect(() => {
     if (!scanOpen || tab !== 'camera') return
@@ -235,9 +310,20 @@ export function ScanDialog() {
       if (resolved || cancelled) return
       const video = videoRef.current
       const canvas = canvasRef.current
-      if (!video || !canvas || video.readyState < video.HAVE_CURRENT_DATA) return
-      // Downscale to ~480px — plenty for a QR, kind to the CPU.
-      const scale = Math.min(1, 480 / Math.max(video.videoWidth, 1))
+      if (
+        !video ||
+        !canvas ||
+        video.readyState < video.HAVE_CURRENT_DATA ||
+        !video.videoWidth ||
+        !video.videoHeight
+      ) {
+        return
+      }
+
+      // Downscale to ~800px max dimension — sharp enough for small QR modules, lightweight for CPU
+      const maxDim = 800
+      const longest = Math.max(video.videoWidth, video.videoHeight)
+      const scale = Math.min(1, maxDim / longest)
       const w = Math.max(1, Math.round(video.videoWidth * scale))
       const h = Math.max(1, Math.round(video.videoHeight * scale))
       canvas.width = w
@@ -255,6 +341,8 @@ export function ScanDialog() {
       if (code?.data) {
         resolved = true
         teardown()
+        playScanChime()
+        triggerHaptic()
         resolveRef.current(code.data)
       }
     }
@@ -265,9 +353,32 @@ export function ScanDialog() {
         if (!cancelled) setCamState('unavailable')
         return
       }
-      try {
-        stream = await media.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-      } catch {
+
+      // Try environment (back) camera first with ideal constraints, then fallbacks
+      const constraintList: MediaStreamConstraints[] = [
+        {
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        },
+        { video: { facingMode }, audio: false },
+        { video: true, audio: false },
+      ]
+
+      for (const constraint of constraintList) {
+        if (cancelled) return
+        try {
+          stream = await media.getUserMedia(constraint)
+          if (stream) break
+        } catch {
+          // Continue to next fallback constraint
+        }
+      }
+
+      if (!stream) {
         if (!cancelled) setCamState('unavailable')
         return
       }
@@ -281,6 +392,8 @@ export function ScanDialog() {
         return
       }
       video.srcObject = stream
+      video.setAttribute('playsinline', 'true')
+      video.setAttribute('webkit-playsinline', 'true')
       try {
         await video.play()
       } catch {
@@ -299,7 +412,7 @@ export function ScanDialog() {
       cancelled = true
       teardown()
     }
-  }, [scanOpen, tab, cameraNonce])
+  }, [scanOpen, tab, cameraNonce, facingMode])
 
   // ── Global "S" shortcut ───────────────────────────────────────────────────
   useEffect(() => {
@@ -432,12 +545,50 @@ export function ScanDialog() {
                 </div>
               )}
             </div>
+
+            {/* Camera toolbar: flip camera + scan from photo */}
+            <div className="mt-2.5 flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setFacingMode((f) => (f === 'environment' ? 'user' : 'environment'))
+                  setCamState('starting')
+                  setCameraNonce((n) => n + 1)
+                }}
+              >
+                <FlipHorizontal className="size-3.5" aria-hidden="true" /> Flip camera
+              </Button>
+
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageFile}
+                  aria-label="Upload photo to scan"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 px-2.5 text-xs"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImageIcon className="size-3.5" aria-hidden="true" /> Scan from photo
+                </Button>
+              </div>
+            </div>
+
             <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
           </TabsContent>
 
           {/* ── Manual tab (the guaranteed fallback) ── */}
           <TabsContent value="manual" className="mt-3">
-            <form onSubmit={manualSubmit} className="space-y-2.5">
+            <form onSubmit={manualSubmit} className="space-y-3">
               <div className="flex gap-2">
                 <Input
                   ref={manualInputRef}
@@ -457,21 +608,29 @@ export function ScanDialog() {
                   <ScanSearch className="size-4" aria-hidden="true" /> Resolve
                 </Button>
               </div>
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Hardware scanners type the code and press Enter.{' '}
-                {isLocationMode ? (
-                  <>
-                    Try: <span className="font-mono">A1-S1</span> · <span className="font-mono">Rack A1</span> ·{' '}
-                    <span className="font-mono">WH1 · Zone A · Rack A1 · Shelf S1</span>
-                  </>
-                ) : (
-                  <>
-                    Try: <span className="font-mono">EL-CTL-CX2</span> · <span className="font-mono">A1-S1</span> ·{' '}
-                    <span className="font-mono">WH1 · Zone A · Rack A1 · Shelf S1</span> ·{' '}
-                    <span className="font-mono">RCPT-1002</span>
-                  </>
-                )}
-              </p>
+
+              {/* 1-tap quick test chips */}
+              <div className="space-y-1.5 rounded-lg border bg-muted/30 p-2.5">
+                <p className="text-[11px] font-medium text-muted-foreground">Tap any code to test instant resolve:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(isLocationMode
+                    ? ['A1-S1', 'A1-S2', 'Rack A1', 'Zone A', 'WH1 · Zone A · Rack A1 · Shelf S1']
+                    : ['RM-STL-ROD10', 'EL-CTL-CX2', 'A1-S1', 'Rack A1', 'RCPT-1002', 'DEL-1001']
+                  ).map((sample) => (
+                    <button
+                      key={sample}
+                      type="button"
+                      onClick={() => {
+                        setManualValue(sample)
+                        handleResolve(sample)
+                      }}
+                      className="rounded-md border bg-background px-2 py-0.5 font-mono text-[11px] font-medium text-foreground/80 shadow-xs transition-colors hover:border-teal-500/50 hover:bg-teal-500/10 hover:text-teal-700 dark:hover:text-teal-300"
+                    >
+                      {sample}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </form>
           </TabsContent>
         </Tabs>

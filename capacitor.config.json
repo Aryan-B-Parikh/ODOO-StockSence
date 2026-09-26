@@ -1,0 +1,25 @@
+{
+  "appId": "app.stocksense.warehouse",
+  "appName": "StockSense",
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#091310",
+    "captureInput": true
+  },
+  "ios": {
+    "backgroundColor": "#091310"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#091310",
+      "showSpinner": false
+    }
+  }
+}

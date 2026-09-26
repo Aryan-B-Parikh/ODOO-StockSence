@@ -1,0 +1,70 @@
+{
+  "name": "StockSense Warehouse",
+  "short_name": "StockSense",
+  "description": "Mobile Warehouse Management & Inventory Intelligence",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay", "minimal-ui"],
+  "background_color": "#091310",
+  "theme_color": "#10b981",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Scan Barcode / QR",
+      "short_name": "Scan",
+      "description": "Instant camera barcode and QR scanner",
+      "url": "/#scan",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Inbound Receipts",
+      "short_name": "Receipts",
+      "description": "Receive and check incoming goods",
+      "url": "/#view=receipts",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Outbound Deliveries",
+      "short_name": "Deliveries",
+      "description": "Pick and pack delivery orders",
+      "url": "/#view=deliveries",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Cycle Counts",
+      "short_name": "Counts",
+      "description": "Perform scheduled inventory cycle counts",
+      "url": "/#view=counts",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "screenshots": []
+}

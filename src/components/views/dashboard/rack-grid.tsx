@@ -1,11 +1,19 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { ChevronDown, Printer, QrCode, Warehouse } from 'lucide-react'
+import { ChevronDown, Maximize2, Printer, QrCode, ScanLine, Warehouse } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,8 +24,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { fmtUSDCompact } from '@/lib/format'
-import { generateQrMatrix } from '@/lib/qr-matrix'
+import { generateQrSvg } from '@/lib/qr-matrix'
 import type { DashboardDTO, MetaDTO } from '@/lib/types'
+import { useScanStore } from '@/stores/scan-store'
 
 import { fadeUp, staggerContainer } from './motion'
 import { groupLocationsByRack, useRackLabelPrint } from './rack-label-print'
@@ -35,24 +44,19 @@ function fillStyle(rack: Rack): React.CSSProperties {
 }
 
 /**
- * Deterministic "QR sticker" placeholder — the scannable label every rack
- * carries (Phase 2: QR codes map to the zone/rack/shelf hierarchy). Rendered
- * from the shared FNV-1a dot-matrix generator (src/lib/qr-matrix.ts) so the
- * on-screen sticker and the printed label are pixel-for-pixel identical.
+ * Standard scannable QR sticker — decodable by camera scanners, phone cameras, and jsQR.
  */
-function QrSticker({ seed }: { seed: string }) {
-  const cells = generateQrMatrix(seed)
+function QrSticker({ seed, onClick }: { seed: string; onClick?: () => void }) {
+  const svg = generateQrSvg(seed, { margin: 1 })
   return (
     <div
-      className="grid size-9 shrink-0 grid-cols-12 gap-px rounded-[4px] bg-foreground p-[3px] shadow-sm"
+      onClick={onClick}
+      className="size-10 shrink-0 overflow-hidden rounded-[5px] bg-white p-0.5 shadow-sm ring-1 ring-border/80 transition-transform hover:scale-110 cursor-pointer"
       role="img"
       aria-label={`QR location label ${seed}`}
-      title={`Scan-to-open: ${seed}`}
-    >
-      {cells.map((lit, i) => (
-        <span key={i} className={lit ? 'bg-background' : 'bg-foreground'} aria-hidden="true" />
-      ))}
-    </div>
+      title={`Click to enlarge / scan QR: ${seed}`}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
   )
 }
 
@@ -114,6 +118,9 @@ function LabelsMenu() {
 
 /** Row 4 — warehouse floor-plan-lite: a tile per rack with value + fill bar. */
 export function RackGrid({ racks }: { racks: DashboardDTO['racks'] }) {
+  const [selectedRack, setSelectedRack] = useState<Rack | null>(null)
+  const openScan = useScanStore((s) => s.openScan)
+
   return (
     <motion.section variants={fadeUp} initial="hidden" animate="visible" aria-label="Rack floor plan">
       <Card className="gap-4">
@@ -126,8 +133,7 @@ export function RackGrid({ racks }: { racks: DashboardDTO['racks'] }) {
               </CardTitle>
               <CardDescription className="flex items-center gap-1.5">
                 <QrCode className="size-3" aria-hidden="true" />
-                On-hand value density across racks — every rack carries a QR label mapping to its
-                zone/rack/shelf hierarchy
+                On-hand value density across racks — click any QR badge to view or scan
               </CardDescription>
             </div>
             <LabelsMenu />
@@ -152,7 +158,10 @@ export function RackGrid({ racks }: { racks: DashboardDTO['racks'] }) {
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span className="transition-transform duration-200 group-hover:scale-110">
-                        <QrSticker seed={`${rack.zoneName}/${rack.rackCode}`} />
+                        <QrSticker
+                          seed={`Rack ${rack.rackCode}`}
+                          onClick={() => setSelectedRack(rack)}
+                        />
                       </span>
                       <div className="min-w-0">
                         <span className="block text-lg font-semibold leading-none tracking-tight">{rack.rackCode}</span>
@@ -179,6 +188,50 @@ export function RackGrid({ racks }: { racks: DashboardDTO['racks'] }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Enlarged QR Code Modal for on-screen camera scanning & rapid test */}
+      {selectedRack && (
+        <Dialog open={selectedRack !== null} onOpenChange={(open) => !open && setSelectedRack(null)}>
+          <DialogContent className="max-w-xs sm:max-w-sm text-center">
+            <DialogHeader>
+              <DialogTitle className="flex items-center justify-center gap-2">
+                <QrCode className="size-5 text-teal-600 dark:text-teal-400" />
+                Rack {selectedRack.rackCode}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedRack.zoneName} · {selectedRack.locationCount} shelf locations
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mx-auto my-2 size-52 rounded-xl border bg-white p-3 shadow-sm ring-1 ring-border/50">
+              <div
+                className="size-full"
+                dangerouslySetInnerHTML={{
+                  __html: generateQrSvg(`Rack ${selectedRack.rackCode}`, { margin: 1 }),
+                }}
+              />
+            </div>
+
+            <p className="text-[12px] text-muted-foreground">
+              Scan with your phone camera or the StockSense scanner to inspect this rack.
+            </p>
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5"
+                onClick={() => {
+                  setSelectedRack(null)
+                  openScan()
+                }}
+              >
+                <ScanLine className="size-3.5" /> Open Scanner
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </motion.section>
   )
 }

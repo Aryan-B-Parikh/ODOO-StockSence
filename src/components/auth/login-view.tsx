@@ -119,9 +119,10 @@ export function LoginView() {
     }
   }
 
-  const fillDemo = (email: string, password: string) => {
+  const fillDemo = async (email: string, password: string) => {
     setValue('email', email, { shouldValidate: true })
     setValue('password', password, { shouldValidate: true })
+    await onSubmit({ email, password })
   }
 
   return (
@@ -325,15 +326,16 @@ export function LoginView() {
 
           <div className="space-y-2">
             <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Demo accounts — one click to fill
+              Demo accounts — 1-tap instant sign in
             </p>
             <div className="grid gap-2">
               {DEMO_ACCOUNTS.map((account) => (
                 <button
                   key={account.email}
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => fillDemo(account.email, account.password)}
-                  className="group flex items-center gap-2.5 rounded-lg border bg-background/60 px-3 py-2 text-left text-sm transition-all hover:border-primary/40 hover:bg-accent hover:shadow-sm"
+                  className="group flex items-center gap-2.5 rounded-lg border bg-background/60 px-3 py-2 text-left text-sm transition-all hover:border-primary/40 hover:bg-accent hover:shadow-sm active:scale-[0.98] disabled:opacity-50"
                 >
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
                     <account.icon className="size-3.5" aria-hidden="true" />
@@ -345,10 +347,9 @@ export function LoginView() {
                     </span>
                   </span>
                   <span
-                    aria-hidden="true"
-                    className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                    className="shrink-0 rounded bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary"
                   >
-                    Fill
+                    Sign In
                   </span>
                 </button>
               ))}

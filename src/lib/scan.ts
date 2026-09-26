@@ -58,7 +58,30 @@ const DOC_CODES: { re: RegExp; view: ViewKey; viewLabel: string }[] = [
 
 /** Parse raw scan text: trim, uppercase, compute the fuzzy key, extract a doc code. */
 export function parseScanInput(raw: string): ParsedScanInput {
-  const trimmed = raw.trim()
+  let trimmed = raw.trim()
+  // Handle scanned URLs (e.g. from mobile or QR codes containing URL links)
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const u = new URL(trimmed)
+      const codeParam =
+        u.searchParams.get('code') ||
+        u.searchParams.get('scan') ||
+        u.searchParams.get('q') ||
+        u.searchParams.get('sku') ||
+        u.searchParams.get('target')
+      if (codeParam) {
+        trimmed = codeParam.trim()
+      } else {
+        const segments = u.pathname.split('/').filter(Boolean)
+        if (segments.length > 0) {
+          trimmed = decodeURIComponent(segments[segments.length - 1]).trim()
+        }
+      }
+    } catch {
+      // Keep trimmed as-is
+    }
+  }
+
   const text = trimmed.toUpperCase()
   const doc = DOC_CODES.find((d) => d.re.test(text)) ?? null
   return {
@@ -127,6 +150,14 @@ function matchLocation(parsed: ParsedScanInput, locations: ScanLocation[]): Loca
   hits = locations.filter(
     (l) => normalizeScanKey(l.rackCode) === key || `rack${normalizeScanKey(l.rackCode)}` === key
   )
+  if (hits.length > 0) return pick(hits)
+
+  // (d2) zone + rack composite — "Zone A/A1", "Zone A / Rack A1", "Zone A - A1"
+  hits = locations.filter((l) => {
+    const zr = normalizeScanKey(`${l.zoneName}${l.rackCode}`)
+    const zrw = normalizeScanKey(`${l.zoneName}rack${l.rackCode}`)
+    return zr === key || zrw === key
+  })
   if (hits.length > 0) return pick(hits)
 
   // (e) zone name or its prefix — "Zone A", "Zone A · Bulk Storage"

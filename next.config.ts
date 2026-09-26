@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  allowedDevOrigins: [
+    "*.pinggy.net",
+    "*.free.pinggy.net",
+    "*.run.pinggy-free.link",
+    "*.loca.lt",
+    "localhost:3000",
+    "192.168.12.64",
+    "192.168.12.64:3000"
+  ],
 };
 
 export default nextConfig;

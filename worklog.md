@@ -493,3 +493,24 @@ Stage Summary:
 - Verification: cross-feature E2E clean (no conflicts between the two parallel agents' work), lint 0 errors, no DB drift (all dialogs cancelled).
 - App state left clean: manager signed in, all dialogs closed, airplane OFF, queue empty.
 - Next-cycle candidates: (1) seed depth pass for richer 14-day flows chart; (2) keyboard-shortcut help dialog (S / Ctrl+L / ⌘K now worth documenting); (3) per-location rebalancing suggestions on product detail; (4) scan-to-open doc detail dialogs (currently scan navigates + toasts); (5) admin/user-management view (the permission model is an extensible list — plan says Administrator role can be added later without redesign).
+
+---
+Task ID: 9-mobile-and-migrations
+Agent: Antigravity
+Task: Database migrations baseline, cross-platform server run, and mobile app version (PWA & Capacitor)
+
+Work Log:
+- Configured DATABASE_URL in .env to use relative SQLite path "file:../db/custom.db", preserving seed data (3 users, 19 products, 1 warehouse, 89 ledger entries).
+- Generated Prisma client and baselined Prisma migrations in prisma/migrations/0_init/migration.sql. Resolved migration as applied via `npx prisma migrate resolve --applied 0_init`. Verified `npx prisma migrate status` reports: "1 migration found in prisma/migrations. Database schema is up to date!".
+- Verified dev server startup on port 3000 (`next dev -p 3000`). Tested health endpoint (/api/health) and authenticated endpoints (/api/auth/login, /api/auth/me, /api/dashboard) with 200 OK responses.
+- Upgraded app to a full Mobile App Version:
+  1. Generated crisp high-resolution mobile app icons via Sharp: public/icons/icon-192x192.png, icon-512x512.png, apple-touch-icon.png (180x180), and maskable Android icons.
+  2. Created public/manifest.json (PWA Web App Manifest) with standalone display mode, orientation, theme colors (#091310 / #10b981), and warehouse shortcuts (Scan, Receipts, Deliveries, Counts).
+  3. Created public/sw.js (Service Worker) with offline asset caching and seamless coordination with the app's offline queue.
+  4. Added PwaProvider to src/app/providers.tsx for service worker registration.
+  5. Updated src/app/layout.tsx with mobile metadata (manifest, appleWebApp capable/black-translucent, viewport-fit=cover, user-scalable=no, apple-touch-icon).
+  6. Created MobileBottomNav (src/components/shell/mobile-bottom-nav.tsx) with native mobile ergonomics: fixed bottom bar, haptic vibration feedback, 5 touch targets (Home, Ops sheet, elevated central SCAN button with emerald glow, Stock/Products, and More/Intelligence sheet with kiosk lock and dark/light toggles).
+  7. Created MobileInstallBanner (src/components/shell/mobile-install-banner.tsx) prompting 1-tap installation on Android and Add to Home Screen on iOS.
+  8. Configured Capacitor (capacitor.config.json) and package scripts (mobile:icons, mobile:init, mobile:android, mobile:open) for native Android APK and iOS builds.
+  9. Created MOBILE_APP_GUIDE.md documentation.
+- Ran eslint across the entire workspace: 0 errors, 0 warnings.

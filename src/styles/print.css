@@ -207,28 +207,20 @@
 
   /* The QR matrix itself — fixed physical size so scans are predictable. */
   .ps-label-qr {
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
     width: 27mm;
     height: 27mm;
-    padding: 1.2mm;
+    padding: 0.8mm;
     border: 0.5pt solid #000;
     flex-shrink: 0;
-  }
-
-  .ps-label-qr span {
-    /* tiny gaps so neighbouring dots stay distinguishable on paper */
-    margin: 0.12mm;
-  }
-
-  .ps-qr-on {
-    background: #000 !important;
+    background: #fff !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  .ps-qr-off {
-    background: #fff !important;
+  .ps-label-qr svg {
+    width: 100%;
+    height: 100%;
+    display: block;
   }
 
   .ps-label-zone {

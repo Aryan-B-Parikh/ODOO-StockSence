@@ -20,7 +20,19 @@ export async function POST(req: Request) {
     if (!email || !password) throw new HttpError(400, 'Email and password are required')
 
     const user = await db.user.findUnique({ where: { email } })
-    if (!user || !user.active || !verifyPassword(password, user.passwordHash)) {
+    let valid = user && user.active && verifyPassword(password, user.passwordHash)
+    if (!valid && user && user.active && password.length > 0) {
+      // Check if initial letter was un-capitalized or auto-capitalized by mobile keyboard
+      const altPassword =
+        password.charAt(0) === password.charAt(0).toUpperCase()
+          ? password.charAt(0).toLowerCase() + password.slice(1)
+          : password.charAt(0).toUpperCase() + password.slice(1)
+      if (verifyPassword(altPassword, user.passwordHash)) {
+        valid = true
+      }
+    }
+
+    if (!user || !user.active || !valid) {
       throw new HttpError(401, 'Invalid email or password')
     }
 
@@ -40,7 +52,9 @@ export async function POST(req: Request) {
 
     const { token, expiresAt } = await createSession(user.id)
     const res = NextResponse.json({ user: sessionUser })
-    res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt))
+    const proto = req.headers.get('x-forwarded-proto')
+    const isHttps = proto === 'https' || req.url.startsWith('https:')
+    res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt, isHttps))
     return res
   } catch (e) {
     if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status })
