@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
@@ -14,14 +14,37 @@ export function TopNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setOpenMenu(null);
   }, [location.pathname]);
 
+  // Close any open menu on Escape or when clicking outside the header.
+  useEffect(() => {
+    if (!openMenu) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenMenu(null);
+    };
+    const handlePointerDown = (event: MouseEvent) => {
+      if (navRef.current && !navRef.current.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [openMenu]);
+
   const toggle = (menu: Exclude<OpenMenu, null>) => {
     setOpenMenu((current) => (current === menu ? null : menu));
   };
+
+  const operationsActive = location.pathname.startsWith('/operations');
+  const settingsActive = location.pathname.startsWith('/settings');
 
   const handleLogout = () => {
     logout();
@@ -31,7 +54,7 @@ export function TopNav() {
   const avatarLabel = (user?.displayName ?? user?.loginId ?? '?').charAt(0).toUpperCase();
 
   return (
-    <header className="topnav">
+    <header className="topnav" ref={navRef}>
       <div className="topnav-inner">
         <div className="brand">
           Stock<span>Sense</span>
@@ -45,7 +68,7 @@ export function TopNav() {
           <div className="nav-dropdown">
             <button
               type="button"
-              className="nav-button"
+              className={operationsActive ? 'nav-button nav-link-active' : 'nav-button'}
               onClick={() => toggle('operations')}
               aria-expanded={openMenu === 'operations'}
             >
@@ -80,7 +103,7 @@ export function TopNav() {
           <div className="nav-dropdown">
             <button
               type="button"
-              className="nav-button"
+              className={settingsActive ? 'nav-button nav-link-active' : 'nav-button'}
               onClick={() => toggle('settings')}
               aria-expanded={openMenu === 'settings'}
             >
