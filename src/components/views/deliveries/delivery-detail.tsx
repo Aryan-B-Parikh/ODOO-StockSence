@@ -1,7 +1,8 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Ban, ClipboardCheck, Loader2, PackageCheck, Truck } from 'lucide-react'
+import { Ban, ClipboardCheck, ListOrdered, Loader2, PackageCheck, Route, Truck } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import {
@@ -72,6 +73,25 @@ export function DeliveryDetailDialog({
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Action failed'),
   })
 
+  // ── Pick-path sorting (Phase 2) ───────────────────────────────────────────
+  // A picker walks the warehouse in shelf order, not line order. Default ON
+  // while picking is in progress (RESERVED/PICKED); the toggle is a per-session
+  // local override that resets when a different delivery is opened.
+  const [sortOverride, setSortOverride] = useState<{ deliveryId: number; value: boolean } | null>(null)
+  const pickPathDefault = delivery?.status === 'RESERVED' || delivery?.status === 'PICKED'
+  const pickPath = delivery && sortOverride?.deliveryId === delivery.id ? sortOverride.value : pickPathDefault
+  const setPickPath = (value: boolean) => {
+    if (delivery) setSortOverride({ deliveryId: delivery.id, value })
+  }
+
+  // Numeric, case-insensitive collation → "A1 · S1" < "A1 · S10" < "A2 · S1" sorts naturally.
+  const pathCollator = useMemo(() => new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }), [])
+  const sortedLines = useMemo(() => {
+    const list = delivery?.lines ?? []
+    if (!pickPath) return list
+    return [...list].sort((a, b) => pathCollator.compare(a.locationPath, b.locationPath))
+  }, [delivery, pickPath, pathCollator])
+
   if (!delivery) return null
 
   const status = delivery.status
@@ -111,11 +131,59 @@ export function DeliveryDetailDialog({
           </p>
         )}
 
-        {/* Lines */}
+        {/* Lines — pick-path sorted by default while picking (walk the racks in order) */}
         <div className="overflow-hidden rounded-lg border">
-          <Table>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b bg-muted/40 px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="text-xs font-semibold">Lines</span>
+              {pickPath && (
+                <span className="truncate text-[11px] font-medium text-teal-700 dark:text-teal-400">
+                  shelf-path order
+                </span>
+              )}
+            </div>
+            <div
+              role="group"
+              aria-label="Line sort order"
+              className="flex items-center gap-0.5 rounded-lg border bg-background p-0.5"
+            >
+              <button
+                type="button"
+                onClick={() => setPickPath(true)}
+                aria-pressed={pickPath}
+                className={cn(
+                  'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-1',
+                  pickPath
+                    ? 'bg-teal-500/15 text-teal-700 dark:text-teal-400'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Route className="size-3.5" aria-hidden="true" /> Pick path
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickPath(false)}
+                aria-pressed={!pickPath}
+                className={cn(
+                  'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-1',
+                  !pickPath
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <ListOrdered className="size-3.5" aria-hidden="true" /> Line order
+              </button>
+            </div>
+          </div>
+          <Table className={pickPath ? 'min-w-[32rem]' : undefined}>
             <TableHeader>
               <TableRow>
+                {pickPath && (
+                  <TableHead className="w-12 text-center">
+                    Path
+                    <span className="sr-only"> — walk order</span>
+                  </TableHead>
+                )}
                 <TableHead>Product</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
@@ -124,10 +192,20 @@ export function DeliveryDetailDialog({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {delivery.lines.map((line) => {
+              {sortedLines.map((line, i) => {
                 const short = line.qty > line.availableAtLocation
                 return (
                   <TableRow key={line.id}>
+                    {pickPath && (
+                      <TableCell className="text-center">
+                        <span
+                          aria-label={`Stop ${i + 1} on the pick path`}
+                          className="inline-flex size-5 items-center justify-center rounded-full border border-teal-500/40 bg-teal-500/10 font-mono text-[10px] font-semibold text-teal-700 tabular dark:text-teal-400"
+                        >
+                          {i + 1}
+                        </span>
+                      </TableCell>
+                    )}
                     <TableCell>
                       <span className="font-mono text-xs font-medium">{line.sku}</span>
                       <span className="block text-xs text-muted-foreground">{line.productName}</span>

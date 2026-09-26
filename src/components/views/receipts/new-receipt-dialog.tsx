@@ -2,8 +2,8 @@
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Info, Loader2, Plus, Trash2, Truck } from 'lucide-react'
-import { useMemo } from 'react'
+import { Camera, ClipboardPaste, Info, Loader2, Plus, Trash2, Truck } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -21,8 +21,9 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { api } from '@/lib/api'
+import { api, OfflineError } from '@/lib/api'
 import { fmtQty } from '@/lib/format'
+import { matchProductLine, parseInvoiceText, type OcrLine } from '@/lib/ocr'
 import type { MetaDTO, ReceiptDTO } from '@/lib/types'
 
 const lineSchema = z.object({
@@ -46,6 +47,68 @@ function plusThreeDays(): string {
 }
 
 const emptyLine = (): LineValues => ({ productId: '', locationId: '', expectedQty: NaN })
+
+// ---------- Photo / OCR pre-fill (Phase 2) ----------
+
+/** One editable row of the "Draft from invoice photo/text" review panel. */
+interface DraftOcrLine {
+  key: string
+  sku: string
+  name: string
+  quantity: string
+  /** '' = unmatched — the user picks a product manually */
+  productId: string
+  matchType: 'exact' | 'fuzzy' | null
+}
+
+let ocrSeq = 0
+const nextOcrKey = () => `ocr-${++ocrSeq}`
+
+/** Turn server OCR lines into editable draft rows. */
+function toDraftLines(lines: OcrLine[]): DraftOcrLine[] {
+  return lines.map((l) => ({
+    key: nextOcrKey(),
+    sku: l.sku,
+    name: l.name,
+    quantity: String(l.quantity),
+    productId: l.matchedProductId != null ? String(l.matchedProductId) : '',
+    matchType: l.matchType,
+  }))
+}
+
+/**
+ * Client-side downscale before upload: canvas → max edge 1280px, JPEG q0.85
+ * → data URL. Keeps the JSON payload small; falls back to the original when
+ * the browser can't handle canvases (never blocks the scan on resize).
+ */
+async function downscaleImage(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('Could not read the selected file'))
+    reader.readAsDataURL(file)
+  })
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image()
+    el.onload = () => resolve(el)
+    el.onerror = () => reject(new Error('Could not decode that image'))
+    el.src = dataUrl
+  })
+  const maxEdge = 1280
+  const scale = Math.min(1, maxEdge / Math.max(img.width, img.height))
+  if (scale >= 1 && dataUrl.length < 1_500_000) return dataUrl
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(img.width * scale))
+    canvas.height = Math.max(1, Math.round(img.height * scale))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return dataUrl
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/jpeg', 0.85)
+  } catch {
+    return dataUrl
+  }
+}
 
 /**
  * "New Receipt" dialog (permission: receive) — creates an EXPECTED document.
@@ -102,6 +165,108 @@ export function NewReceiptDialog({
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'lines' })
   const watchedLines = useWatch({ control: form.control, name: 'lines' })
 
+  // ---- Photo/OCR pre-fill (Phase 2) — drafts lines for review; NEVER auto-commits ----
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [ocrReading, setOcrReading] = useState(false)
+  const [ocrLines, setOcrLines] = useState<DraftOcrLine[] | null>(null)
+  const [ocrSource, setOcrSource] = useState<'photo' | 'text'>('photo')
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteText, setPasteText] = useState('')
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      // leave the form itself untouched (existing behaviour) — just clear the draft panel
+      setOcrLines(null)
+      setPasteOpen(false)
+      setPasteText('')
+      setOcrReading(false)
+    }
+    onOpenChange(next)
+  }
+
+  /** Photo → downscale → /api/receipts/ocr → review panel. */
+  const handlePhoto = async (file: File | undefined) => {
+    if (!file) return
+    setOcrReading(true)
+    setOcrLines(null)
+    try {
+      const imageBase64 = await downscaleImage(file)
+      const res = await api.post<{ lines: OcrLine[] }>('/api/receipts/ocr', { imageBase64 })
+      setOcrLines(toDraftLines(res.lines))
+      setOcrSource('photo')
+      toast.success(`Read ${res.lines.length} ${res.lines.length === 1 ? 'line' : 'lines'} from the photo`, {
+        description: 'Review the draft below — nothing is added until you confirm.',
+      })
+    } catch (err) {
+      if (err instanceof OfflineError) {
+        toast.warning("You're offline — photo scan isn't available right now", {
+          description: 'Add lines manually below, or paste the invoice text (works offline).',
+        })
+      } else {
+        toast.warning("Couldn't read that photo — add lines manually or paste the text", {
+          description: err instanceof Error ? err.message : undefined,
+        })
+      }
+      setPasteOpen(true)
+    } finally {
+      setOcrReading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  /** Pasted invoice text → local regex parse (zero-AI) → same review panel. */
+  const applyPastedText = () => {
+    const items = parseInvoiceText(pasteText)
+    if (items.length === 0) {
+      toast.warning('No lines found in that text', {
+        description: 'Paste one product per line, e.g. “CN-GLV-NIT 40 pcs” or “EL-CTL-CX2, 15”.',
+      })
+      return
+    }
+    const catalogue = (meta?.products ?? []).map((p) => ({ id: p.id, sku: p.sku, name: p.name }))
+    setOcrLines(
+      items.map((item) => {
+        const { product, matchType } = matchProductLine(item, catalogue)
+        return {
+          key: nextOcrKey(),
+          sku: item.sku,
+          name: item.name,
+          quantity: String(item.quantity),
+          productId: product != null ? String(product.id) : '',
+          matchType,
+        }
+      })
+    )
+    setOcrSource('text')
+    setPasteOpen(false)
+    toast.success(`Parsed ${items.length} ${items.length === 1 ? 'line' : 'lines'} from the text`, {
+      description: 'Review the draft below — nothing is added until you confirm.',
+    })
+  }
+
+  /** Rows ready to become receipt lines (product picked + qty > 0). */
+  const addableDraftCount = (ocrLines ?? []).filter(
+    (l) => l.productId !== '' && Number(l.quantity) > 0
+  ).length
+
+  const addDraftLines = () => {
+    const addable = (ocrLines ?? []).filter((l) => l.productId !== '' && Number(l.quantity) > 0)
+    if (addable.length === 0) {
+      toast.warning('Nothing to add yet', {
+        description: 'Pick a product and a quantity above 0 for at least one draft line.',
+      })
+      return
+    }
+    for (const l of addable) {
+      append({ productId: l.productId, locationId: '', expectedQty: Number(l.quantity) })
+    }
+    setOcrLines(null)
+    setPasteText('')
+    toast.success(`${addable.length} ${addable.length === 1 ? 'line' : 'lines'} added to the receipt`, {
+      description: 'Pick a destination shelf for each new line below.',
+    })
+  }
+
   const onSubmit = async (values: CreateValues) => {
     try {
       const res = await api.post<{ receipt: ReceiptDTO }>('/api/receipts', {
@@ -137,7 +302,7 @@ export function NewReceiptDialog({
   )
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -192,6 +357,186 @@ export function NewReceiptDialog({
                   </FormItem>
                 )}
               />
+            </div>
+
+            {/* Photo / OCR pre-fill (Phase 2) — drafts lines; manual entry below stays the fallback */}
+            <div className="space-y-3 rounded-lg border border-dashed p-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={(e) => void handlePhoto(e.target.files?.[0])}
+                aria-label="Invoice photo"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={ocrReading}
+                onClick={() => fileInputRef.current?.click()}
+                className="h-auto w-full flex-col gap-1.5 rounded-lg border-dashed py-5 font-normal"
+              >
+                {ocrReading ? (
+                  <>
+                    <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
+                    <span className="text-sm font-medium">Reading invoice…</span>
+                    <span className="text-xs text-muted-foreground">Usually takes a few seconds</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera className="size-5 text-muted-foreground" aria-hidden="true" />
+                    <span className="text-sm font-medium">Scan invoice photo</span>
+                    <span className="text-xs text-muted-foreground">
+                      Take a photo or choose an image — we'll draft the lines for you
+                    </span>
+                  </>
+                )}
+              </Button>
+              <div className="flex items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto px-0 py-0 text-xs"
+                  onClick={() => setPasteOpen((v) => !v)}
+                >
+                  <ClipboardPaste className="size-3.5" aria-hidden="true" />
+                  {pasteOpen ? 'Hide paste box' : 'Paste invoice text instead'}
+                </Button>
+                {ocrLines !== null && (
+                  <span className="text-xs text-muted-foreground">Draft below — nothing is added until you confirm</span>
+                )}
+              </div>
+              {pasteOpen && (
+                <div className="space-y-2">
+                  <Textarea
+                    rows={3}
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    placeholder={'One product per line, e.g.\nCN-GLV-NIT 40 pcs\nEL-CTL-CX2, 15'}
+                    aria-label="Paste invoice text"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setPasteOpen(false)}>
+                      Close
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={applyPastedText}
+                      disabled={pasteText.trim() === ''}
+                    >
+                      Read text
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {ocrLines !== null && (
+                <div className="rounded-lg border bg-card p-3" role="region" aria-label="Draft from invoice">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <h4 className="text-sm font-medium">
+                      {ocrSource === 'photo' ? 'Draft from invoice photo' : 'Draft from pasted text'}
+                    </h4>
+                    <span className="text-xs text-muted-foreground">
+                      {ocrLines.length} {ocrLines.length === 1 ? 'line' : 'lines'} · check each before adding
+                    </span>
+                  </div>
+                  <div className="divide-y">
+                    {ocrLines.map((l) => {
+                      const matched = l.productId !== ''
+                      return (
+                        <div key={l.key} className="grid gap-2 py-2.5 first:pt-1.5 last:pb-0 sm:grid-cols-[minmax(0,1fr)_7.5rem] sm:items-center">
+                          <div className="min-w-0 space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {l.matchType === 'exact' ? (
+                                <span className="inline-flex shrink-0 items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                                  Matched · {l.sku}
+                                </span>
+                              ) : matched ? (
+                                <span className="inline-flex shrink-0 items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                                  Needs review · best guess {l.sku}
+                                </span>
+                              ) : (
+                                <span className="inline-flex shrink-0 items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                                  Not in catalogue — pick manually
+                                </span>
+                              )}
+                              {l.name !== '' && l.sku !== '' && (
+                                <span className="truncate text-xs text-muted-foreground">{l.name}</span>
+                              )}
+                              {l.name !== '' && l.sku === '' && (
+                                <span className="truncate font-mono text-xs">{l.name}</span>
+                              )}
+                            </div>
+                            <Select
+                              value={l.productId}
+                              onValueChange={(v) =>
+                                setOcrLines((prev) =>
+                                  (prev ?? []).map((row) => (row.key === l.key ? { ...row, productId: v } : row))
+                                )
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-full" aria-label={`Product for ${l.sku || l.name}`}>
+                                <SelectValue placeholder="Pick product" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {productGroups.map(([category, products]) => (
+                                  <SelectGroup key={category}>
+                                    <SelectLabel>{category}</SelectLabel>
+                                    {products.map((p) => (
+                                      <SelectItem key={p.id} value={String(p.id)}>
+                                        <span className="font-mono text-xs">{p.sku}</span> — {p.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-center gap-2 sm:justify-end">
+                            <Input
+                              type="number"
+                              min={1}
+                              step={1}
+                              inputMode="numeric"
+                              aria-label={`Quantity for ${l.sku || l.name}`}
+                              className="h-8 w-full tabular-nums sm:w-24"
+                              value={l.quantity}
+                              onChange={(e) =>
+                                setOcrLines((prev) =>
+                                  (prev ?? []).map((row) =>
+                                    row.key === l.key ? { ...row, quantity: e.target.value } : row
+                                  )
+                                )
+                              }
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setOcrLines(null)
+                        setPasteText('')
+                      }}
+                    >
+                      Discard
+                    </Button>
+                    <Button type="button" size="sm" onClick={addDraftLines} disabled={addableDraftCount === 0}>
+                      <Plus className="size-3.5" aria-hidden="true" />
+                      Add {addableDraftCount} {addableDraftCount === 1 ? 'line' : 'lines'} to receipt
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Dynamic lines */}
@@ -348,7 +693,7 @@ export function NewReceiptDialog({
             />
 
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={form.formState.isSubmitting || metaQuery.isPending}>

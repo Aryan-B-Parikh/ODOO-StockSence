@@ -133,6 +133,7 @@
       scroll-behavior: auto;
     }
     .pulse-dot,
+    .scanline,
     .shimmer {
       animation: none;
     }
@@ -178,6 +179,22 @@
   );
   background-size: 200% 100%;
   animation: shimmer-x 1.8s linear infinite;
+}
+
+/* Scan dialog — sweeping scan line inside the QR frame */
+@keyframes scanline-sweep {
+  0%,
+  100% {
+    top: 6%;
+    opacity: 0.35;
+  }
+  50% {
+    top: 94%;
+    opacity: 1;
+  }
+}
+.scanline {
+  animation: scanline-sweep 2.4s ease-in-out infinite;
 }
 
 /* Custom scrollbars */

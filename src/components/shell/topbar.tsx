@@ -1,7 +1,7 @@
 'use client'
 
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { LockKeyhole, Menu, RefreshCw, WifiOff } from 'lucide-react'
+import { LockKeyhole, Menu, RefreshCw, ScanLine, WifiOff } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -11,10 +11,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'
 import { useLockStore } from '@/stores/lock-store'
 import { useOfflineStore } from '@/stores/offline-store'
+import { useScanStore } from '@/stores/scan-store'
 import { useUIStore } from '@/stores/ui-store'
 
 import { NAV_BY_VIEW } from './nav'
 import { SetPinDialog } from './pin-lock'
+import { ScanDialog } from './scan-dialog'
 import { SearchCommand } from './search-command'
 import { SidebarContent } from './sidebar'
 
@@ -33,6 +35,9 @@ export function Topbar() {
   const simulatedOffline = useOfflineStore((s) => s.simulatedOffline)
   const queueCount = useOfflineStore((s) => s.queue.length)
   const setSimulatedOffline = useOfflineStore((s) => s.setSimulatedOffline)
+
+  // Scan dialog (Phase 2) — barcode/QR scan input with a manual fallback.
+  const openScan = useScanStore((s) => s.openScan)
 
   const meta = NAV_BY_VIEW[view]
 
@@ -80,6 +85,24 @@ export function Topbar() {
       </div>
 
       <SearchCommand />
+
+      {/* Barcode/QR scan input — camera decode + guaranteed manual fallback (also "S") */}
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="relative size-9 shrink-0"
+              onClick={() => openScan()}
+              aria-label="Scan barcode / QR code"
+            >
+              <ScanLine className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Scan barcode / QR (S)</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       {/* Airplane-mode simulation toggle — amber when on, amber badge = queued actions */}
       <TooltipProvider delayDuration={200}>
@@ -143,6 +166,9 @@ export function Topbar() {
 
       {/* First-time flow: set a PIN, then the screen locks */}
       <SetPinDialog open={setPinOpen} onOpenChange={setSetPinOpen} onPinSet={lock} />
+
+      {/* Global scan dialog (store-driven — shared with the transfer scan-to-scan fields) */}
+      <ScanDialog />
 
       {/* Mobile navigation */}
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>

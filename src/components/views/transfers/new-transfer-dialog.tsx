@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Loader2, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, Loader2, Plus, ScanLine, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -17,9 +17,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { api } from '@/lib/api'
 import type { MetaDTO, ProductDTO, ProductListDTO, StockByLocationDTO, TransferDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useScanStore } from '@/stores/scan-store'
 
 interface DraftLine {
   key: string
@@ -41,10 +43,36 @@ type LineState =
 /** "New Transfer" dialog — source Available → In transit → destination Available. */
 export function NewTransferDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const qc = useQueryClient()
-  const [fromId, setFromId] = useState<number | null>(null)
-  const [toId, setToId] = useState<number | null>(null)
   const [note, setNote] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([newLine()])
+
+  // ── Scan-to-scan route fields (Phase 2) ─────────────────────────────────
+  // Each route field is "local manual pick, else the scanned location handed
+  // over by the Scan dialog" — the store's pending pair (written by the global
+  // scan's "New transfer from/to here" quick actions, or by an in-dialog
+  // scan). Clicking a field's Scan button clears that field first: scanning
+  // replaces it. The dropdowns remain the always-available manual fallback.
+  const openScan = useScanStore((s) => s.openScan)
+  const pendingFrom = useScanStore((s) => s.pendingTransferFrom)
+  const pendingTo = useScanStore((s) => s.pendingTransferTo)
+  const setTransferTarget = useScanStore((s) => s.setTransferTarget)
+  const clearTransferTargets = useScanStore((s) => s.clearTransferTargets)
+
+  const [fromOverride, setFromOverride] = useState<number | null>(null)
+  const [toOverride, setToOverride] = useState<number | null>(null)
+  const fromId = fromOverride ?? pendingFrom
+  const toId = toOverride ?? pendingTo
+
+  const scanRouteField = (field: 'from' | 'to') => {
+    if (field === 'from') {
+      setFromOverride(null)
+      setTransferTarget('from', null)
+    } else {
+      setToOverride(null)
+      setTransferTarget('to', null)
+    }
+    openScan({ mode: 'location', field })
+  }
 
   const productsQ = useQuery({
     queryKey: ['products'],
@@ -116,8 +144,9 @@ export function NewTransferDialog({ open, onOpenChange }: { open: boolean; onOpe
   })
 
   const reset = () => {
-    setFromId(null)
-    setToId(null)
+    setFromOverride(null)
+    setToOverride(null)
+    clearTransferTargets()
     setNote('')
     setLines([newLine()])
   }
@@ -146,11 +175,17 @@ export function NewTransferDialog({ open, onOpenChange }: { open: boolean; onOpe
           </DialogDescription>
         </DialogHeader>
 
-        {/* Route selects */}
+        {/* Route selects — each with a QR scan-to-scan button; the dropdown stays the manual fallback */}
         <div className="grid items-end gap-2.5 sm:grid-cols-[1fr_auto_1fr]">
           <div className="space-y-1.5">
-            <Label htmlFor="transfer-from">From (source)</Label>
-            <Select value={fromId != null ? String(fromId) : ''} onValueChange={(v) => setFromId(Number(v))}>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="transfer-from">From (source)</Label>
+              <ScanFieldButton
+                label="Scan the source location's QR label"
+                onClick={() => scanRouteField('from')}
+              />
+            </div>
+            <Select value={fromId != null ? String(fromId) : ''} onValueChange={(v) => setFromOverride(Number(v))}>
               <SelectTrigger id="transfer-from" className="w-full" disabled={metaQ.isPending}>
                 <SelectValue placeholder={metaQ.isPending ? 'Loading…' : 'Source location'} />
               </SelectTrigger>
@@ -165,8 +200,14 @@ export function NewTransferDialog({ open, onOpenChange }: { open: boolean; onOpe
           </div>
           <ArrowRight className="mx-auto size-4 shrink-0 pb-2.5 text-muted-foreground" aria-hidden="true" />
           <div className="space-y-1.5">
-            <Label htmlFor="transfer-to">To (destination)</Label>
-            <Select value={toId != null ? String(toId) : ''} onValueChange={(v) => setToId(Number(v))}>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="transfer-to">To (destination)</Label>
+              <ScanFieldButton
+                label="Scan the destination location's QR label"
+                onClick={() => scanRouteField('to')}
+              />
+            </div>
+            <Select value={toId != null ? String(toId) : ''} onValueChange={(v) => setToOverride(Number(v))}>
               <SelectTrigger id="transfer-to" className="w-full" disabled={metaQ.isPending}>
                 <SelectValue placeholder={metaQ.isPending ? 'Loading…' : 'Destination location'} />
               </SelectTrigger>
@@ -297,6 +338,27 @@ export function NewTransferDialog({ open, onOpenChange }: { open: boolean; onOpe
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Small teal "Scan" affordance next to a route label — opens the Scan dialog in location mode. */
+function ScanFieldButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onClick}
+            aria-label={label}
+            className="inline-flex h-6 items-center gap-1 rounded-md border border-dashed border-teal-500/50 bg-teal-500/5 px-2 text-[11px] font-medium text-teal-700 transition-colors hover:bg-teal-500/15 hover:text-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 dark:text-teal-400 dark:hover:text-teal-300"
+          >
+            <ScanLine className="size-3" aria-hidden="true" /> Scan
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="left">{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 

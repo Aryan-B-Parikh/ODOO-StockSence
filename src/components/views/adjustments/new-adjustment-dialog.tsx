@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Mic, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -18,10 +18,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api } from '@/lib/api'
 import { fmtQty } from '@/lib/format'
 import { enqueueableMutation } from '@/lib/offline-replay'
+import { parseAdjustmentSpeech } from '@/lib/speech'
 import type { AdjustmentDTO, MetaDTO, ProductDTO, ProductListDTO, StockByLocationDTO } from '@/lib/types'
+import { cn } from '@/lib/utils'
 
 interface DraftLine {
   key: string
@@ -41,6 +44,9 @@ let seq = 0
 const nextKey = () => `line-${++seq}`
 const newLine = (): DraftLine => ({ key: nextKey(), productId: null, locationId: null, countedQty: '' })
 
+/** Fields the voice parser just filled → briefly ring them teal so the eye lands on them. */
+type VoiceHighlight = { product?: boolean; location?: boolean; qty?: boolean; reason?: boolean }
+
 /** "New Adjustment" dialog — count variances routed by the severity engine. */
 export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const qc = useQueryClient()
@@ -48,6 +54,31 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
   const [reasonTouched, setReasonTouched] = useState(false)
   const [note, setNote] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([newLine()])
+
+  // ---- Voice dictation (Phase 2) — a HELPER; every manual field stays usable ----
+  const [listening, setListening] = useState(false)
+  const [transcript, setTranscript] = useState<string | null>(null)
+  const [transcriptApplied, setTranscriptApplied] = useState(false)
+  const [voiceHighlight, setVoiceHighlight] = useState<VoiceHighlight>({})
+  const recRef = useRef<any>(null)
+  const highlightTimeoutRef = useRef<number | null>(null)
+
+  // Feature-detect once (client only) — hidden behind typeof window for SSR.
+  const srSupported = useMemo(
+    () => typeof window !== 'undefined' && !!((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition),
+    []
+  )
+
+  // Kill any live recognition / pending highlight timer when the dialog unmounts.
+  useEffect(
+    () => () => {
+      try {
+        recRef.current?.abort?.()
+      } catch {}
+      if (highlightTimeoutRef.current !== null) window.clearTimeout(highlightTimeoutRef.current)
+    },
+    []
+  )
 
   const productsQ = useQuery({
     queryKey: ['products'],
@@ -139,6 +170,115 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
     setReasonTouched(false)
     setNote('')
     setLines([newLine()])
+    stopListening()
+    setTranscript(null)
+    setTranscriptApplied(false)
+    setVoiceHighlight({})
+  }
+
+  const stopListening = () => {
+    try {
+      recRef.current?.stop?.()
+    } catch {}
+    recRef.current = null
+    setListening(false)
+  }
+
+  /** Parse a final transcript and merge matched parts into the first line / reason. */
+  const applyTranscript = (text: string) => {
+    setTranscript(text)
+    const parsed = parseAdjustmentSpeech(
+      text,
+      products.map((p: ProductDTO) => ({ id: p.id, sku: p.sku, name: p.name })),
+      locations.map((l) => ({ id: l.id, rackCode: l.rackCode, code: l.code, fullPath: l.fullPath }))
+    )
+
+    const parts: string[] = []
+    const highlight: VoiceHighlight = {}
+    if (parsed.product) {
+      parts.push(parsed.product.name)
+      highlight.product = true
+    }
+    if (parsed.location) {
+      parts.push(`${parsed.location.rackCode}-${parsed.location.code}`)
+      highlight.location = true
+    }
+    if (parsed.deltaQty !== undefined) {
+      highlight.qty = true
+      parts.push(parsed.absolute ? `= ${parsed.deltaQty}` : `${parsed.deltaQty >= 0 ? '+' : '−'}${Math.abs(parsed.deltaQty)}`)
+    }
+    // Only fill the reason when it's still empty — never overwrite typing.
+    const willSetReason = parsed.reason !== undefined && reason.trim() === ''
+    if (parsed.reason && willSetReason) {
+      parts.push(parsed.reason.split('—')[0].trim())
+      highlight.reason = true
+    }
+
+    if (parts.length === 0) {
+      setTranscriptApplied(false)
+      toast.warning("Couldn't parse that — fill the fields manually", {
+        description: `I heard “${text}”`,
+      })
+      return
+    }
+
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== 0) return l
+        const next = { ...l }
+        if (parsed.product) next.productId = parsed.product.id
+        if (parsed.location) next.locationId = parsed.location.id
+        if (parsed.deltaQty !== undefined) {
+          if (parsed.absolute) {
+            next.countedQty = String(parsed.deltaQty)
+          } else {
+            // the dialog records the ABSOLUTE counted qty — convert the signed
+            // delta against the system on-hand at the matched product/location.
+            const key = `${parsed.product?.id ?? next.productId}:${parsed.location?.id ?? next.locationId}`
+            const sys = stockAt.get(key)?.onHand ?? 0
+            next.countedQty = String(Math.max(0, sys + parsed.deltaQty))
+          }
+        }
+        return next
+      })
+    )
+    if (willSetReason && parsed.reason !== undefined) setReason(parsed.reason)
+    setTranscriptApplied(true)
+    setVoiceHighlight(highlight)
+    if (highlightTimeoutRef.current !== null) window.clearTimeout(highlightTimeoutRef.current)
+    highlightTimeoutRef.current = window.setTimeout(() => setVoiceHighlight({}), 1800)
+    toast.success(`Heard: ${parts.join(' · ')}`, {
+      description: 'Fields filled below — review before posting.',
+    })
+  }
+
+  const startListening = () => {
+    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
+    if (!SR) return
+    try {
+      recRef.current?.abort?.()
+    } catch {}
+    const rec = new SR()
+    recRef.current = rec
+    rec.lang = 'en-US'
+    rec.interimResults = false
+    rec.continuous = false
+    rec.maxAlternatives = 1
+    rec.onresult = (event: any) => {
+      const text: string = event.results?.[0]?.[0]?.transcript ?? ''
+      if (text.trim() !== '') applyTranscript(text.trim())
+    }
+    rec.onerror = () => {
+      setListening(false)
+      toast.warning("Didn't catch that", { description: 'Tap the mic and try again — or fill the fields below.' })
+    }
+    rec.onend = () => setListening(false)
+    try {
+      rec.start()
+      setListening(true)
+    } catch {
+      setListening(false)
+    }
   }
 
   const handleOpenChange = (next: boolean) => {
@@ -162,6 +302,61 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
           </DialogDescription>
         </DialogHeader>
 
+        {/* Voice dictation (Phase 2) — helper only; the manual fields below are the fallback */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={listening ? stopListening : startListening}
+                disabled={!srSupported}
+                aria-label={srSupported ? 'Dictate adjustment (voice)' : 'Voice input not supported in this browser'}
+                aria-pressed={listening}
+                className={cn(
+                  'size-9 shrink-0 rounded-full transition-all',
+                  listening && 'animate-pulse border-red-500/50 bg-red-500/10 text-red-600 ring-2 ring-red-400/40 hover:bg-red-500/15 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400'
+                )}
+              >
+                <Mic className="size-4" aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {!srSupported
+                ? 'Voice input not supported in this browser — use the fields below'
+                : listening
+                  ? 'Listening — tap to stop'
+                  : 'Dictate adjustment (voice)'}
+            </TooltipContent>
+          </Tooltip>
+          {listening ? (
+            <p
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-300"
+              role="status"
+            >
+              <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+              <span className="truncate">Listening… try: “Nitrile gloves plus two at A1 S1”</span>
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {srSupported ? 'Dictate it instead — try “Nitrile gloves plus two at A1 S1”' : 'Voice input not available — use the fields below'}
+            </p>
+          )}
+        </div>
+
+        {transcript && (
+          <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs" role="status">
+            <span className="text-muted-foreground">I heard: </span>
+            <span className="font-mono">“{transcript}”</span>
+            {transcriptApplied && (
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                Voice input is a helper — always review before posting.
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="adj-reason">Reason</Label>
           <Textarea
@@ -173,6 +368,7 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
             rows={2}
             aria-invalid={reasonIssue !== null && reasonTouched}
             required
+            className={cn('transition-all duration-500', voiceHighlight.reason && 'border-teal-500/50 ring-2 ring-teal-500/60')}
           />
           {reasonIssue && reasonTouched && <p className="text-xs font-medium text-red-600">{reasonIssue}</p>}
         </div>
@@ -193,7 +389,7 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
             <span className="text-xs text-muted-foreground">{lines.length} of max 8</span>
           </div>
 
-          {lines.map((line) => {
+          {lines.map((line, i) => {
             const stock = stockFor(line)
             const unit = line.productId != null ? productById.get(line.productId)?.unit : undefined
             const counted = Number(line.countedQty)
@@ -208,7 +404,13 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
                       value={line.productId != null ? String(line.productId) : ''}
                       onValueChange={(v) => updateLine(line.key, { productId: Number(v) })}
                     >
-                      <SelectTrigger id={`product-${line.key}`} className="w-full" disabled={productsQ.isPending}>
+                      <SelectTrigger
+                        id={`product-${line.key}`}
+                        className={cn(
+                          'w-full transition-all duration-500',
+                          i === 0 && voiceHighlight.product && 'border-teal-500/50 ring-2 ring-teal-500/60'
+                        )}
+                        disabled={productsQ.isPending}>
                         <SelectValue placeholder={productsQ.isPending ? 'Loading products…' : 'Choose product'} />
                       </SelectTrigger>
                       <SelectContent>
@@ -226,7 +428,13 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
                       value={line.locationId != null ? String(line.locationId) : ''}
                       onValueChange={(v) => updateLine(line.key, { locationId: Number(v) })}
                     >
-                      <SelectTrigger id={`location-${line.key}`} className="w-full" disabled={metaQ.isPending}>
+                      <SelectTrigger
+                        id={`location-${line.key}`}
+                        className={cn(
+                          'w-full transition-all duration-500',
+                          i === 0 && voiceHighlight.location && 'border-teal-500/50 ring-2 ring-teal-500/60'
+                        )}
+                        disabled={metaQ.isPending}>
                         <SelectValue placeholder={metaQ.isPending ? 'Loading locations…' : 'Counted at location'} />
                       </SelectTrigger>
                       <SelectContent>
@@ -253,6 +461,10 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
                       onChange={(e) => updateLine(line.key, { countedQty: e.target.value })}
                       placeholder="What you counted"
                       aria-invalid={line.countedQty !== '' && !lineValid(line)}
+                      className={cn(
+                        'transition-all duration-500',
+                        i === 0 && voiceHighlight.qty && 'border-teal-500/50 ring-2 ring-teal-500/60'
+                      )}
                     />
                   </div>
                   <Button

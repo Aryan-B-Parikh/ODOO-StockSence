@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api } from '@/lib/api'
 import type { TransferDTO, TransferListDTO } from '@/lib/types'
 import { useAuthStore } from '@/stores/auth-store'
+import { useScanStore } from '@/stores/scan-store'
 
 import { ErrorState } from './transfers/bits'
 import { NewTransferDialog } from './transfers/new-transfer-dialog'
@@ -32,7 +33,15 @@ export function TransfersView() {
 
   const [selected, setSelected] = useState<TransferDTO | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpenLocal, setCreateOpenLocal] = useState(false)
+
+  // Scan handoff: the global scan dialog's "New transfer from/to here" quick
+  // action navigates here and asks for the dialog — derived into `open` (no
+  // effect needed). The prefilled route comes from the scan store's pending
+  // pair, consumed inside NewTransferDialog.
+  const newTransferOpen = useScanStore((s) => s.newTransferOpen)
+  const ackNewTransferOpen = useScanStore((s) => s.ackNewTransferOpen)
+  const createOpen = createOpenLocal || newTransferOpen
 
   const query = useQuery({
     queryKey: ['transfers'],
@@ -50,7 +59,7 @@ export function TransfersView() {
         icon={<ArrowLeftRight className="size-5" />}
         actions={
           canTransfer && (
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button onClick={() => setCreateOpenLocal(true)}>
               <Plus className="size-4" aria-hidden="true" /> New Transfer
             </Button>
           )
@@ -82,7 +91,7 @@ export function TransfersView() {
                 transfers={tab.value === 'ALL' ? transfers : transfers.filter((t) => t.status === tab.value)}
                 tabLabel={tab.label}
                 canCreate={canTransfer}
-                onNew={() => setCreateOpen(true)}
+                onNew={() => setCreateOpenLocal(true)}
                 onSelect={(t) => {
                   setSelected(t)
                   setDetailOpen(true)
@@ -99,7 +108,13 @@ export function TransfersView() {
         onUpdated={setSelected}
       />
 
-      <NewTransferDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <NewTransferDialog
+        open={createOpen}
+        onOpenChange={(next) => {
+          setCreateOpenLocal(next)
+          if (!next) ackNewTransferOpen()
+        }}
+      />
     </div>
   )
 }
