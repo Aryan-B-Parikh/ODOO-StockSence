@@ -1,13 +1,19 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
 import { ActiveView } from '@/components/views/view-registry'
+import { useOfflineAutoReplay } from '@/lib/offline-replay'
+import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { useLockStore } from '@/stores/lock-store'
+import { useOfflineStore } from '@/stores/offline-store'
 import { cn } from '@/lib/utils'
+import type { ProductListDTO } from '@/lib/types'
 
 import { AppFooter } from './footer'
+import { OfflineBanner } from './offline-banner'
 import { PinLockGate } from './pin-lock'
 import { Sidebar } from './sidebar'
 import { Topbar } from './topbar'
@@ -38,12 +44,37 @@ export function AppShell() {
     return () => document.body.classList.remove('overflow-hidden')
   }, [locked])
 
+  // Offline queue (Phase 2): hydrate the persisted queue on mount + install
+  // the auto-replay triggers (window 'online' event + 30s interval while the
+  // queue is non-empty). The banner renders under the topbar in normal flow.
+  const initOffline = useOfflineStore((s) => s.initOffline)
+  useEffect(() => {
+    initOffline()
+  }, [initOffline])
+  useOfflineAutoReplay()
+
+  // Offline cache warmer: dialogs (new adjustment, new receipt, …) query the
+  // bare ['products'] / ['meta'] keys, which differ from the view-level keys
+  // (['products', search, category]). Prefetch them once per session while
+  // online so those dialogs keep their dropdown data when the device is
+  // offline (airplane mode) — TanStack then serves the cached copy.
+  const queryClient = useQueryClient()
+  const simulatedOffline = useOfflineStore((s) => s.simulatedOffline)
+  useEffect(() => {
+    if (simulatedOffline) return
+    void queryClient.prefetchQuery({
+      queryKey: ['products'],
+      queryFn: () => api.get<ProductListDTO>('/api/products'),
+    })
+  }, [queryClient, simulatedOffline])
+
   return (
     <div className={cn('app-chrome flex min-h-screen flex-col bg-background')}>
       <div className="flex flex-1">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
+          <OfflineBanner />
           <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 md:px-6 md:py-6">
             <ActiveView />
           </main>

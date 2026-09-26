@@ -2,7 +2,8 @@
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { motion } from 'framer-motion'
-import { Loader2, LockKeyhole, LogIn, Mail, Package, ShieldCheck, User } from 'lucide-react'
+import { Loader2, LockKeyhole, LogIn, Mail, Package, ShieldCheck, User, WifiOff } from 'lucide-react'
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -10,9 +11,10 @@ import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ApiError } from '@/lib/api'
+import { ApiError, OfflineError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
+import { useOfflineStore } from '@/stores/offline-store'
 
 const loginSchema = z.object({
   email: z.email('Enter a valid email address'),
@@ -74,6 +76,18 @@ function Pipeline({ label, chips }: { label: string; chips: { text: string; tone
 
 export function LoginView() {
   const login = useAuthStore((s) => s.login)
+  const simulatedOffline = useOfflineStore((s) => s.simulatedOffline)
+  const setSimulatedOffline = useOfflineStore((s) => s.setSimulatedOffline)
+  const initOffline = useOfflineStore((s) => s.initOffline)
+
+  // Hydrate the offline store on the login screen too (normally done in the
+  // authed app shell): a reload while airplane mode is ON lands here, and the
+  // escape-hatch banner below needs the persisted flag. Post-mount, so the
+  // SSR pass never mismatches.
+  useEffect(() => {
+    initOffline()
+  }, [initOffline])
+
   const {
     register,
     handleSubmit,
@@ -92,13 +106,15 @@ export function LoginView() {
       })
     } catch (err) {
       const message =
-        err instanceof ApiError
-          ? err.status === 401
-            ? 'Invalid email or password.'
-            : err.status === 404
-              ? 'API not ready yet — the backend is still starting up. Try again in a moment.'
-              : err.message
-          : 'Something went wrong — please try again.'
+        err instanceof OfflineError
+          ? 'You are offline — sign-in needs a connection. Turn off airplane mode or reconnect, then try again.'
+          : err instanceof ApiError
+            ? err.status === 401
+              ? 'Invalid email or password.'
+              : err.status === 404
+                ? 'API not ready yet — the backend is still starting up. Try again in a moment.'
+                : err.message
+            : 'Something went wrong — please try again.'
       toast.error('Sign-in failed', { description: message })
     }
   }
@@ -231,6 +247,33 @@ export function LoginView() {
               Access the Riverside Distribution Center workspace.
             </p>
           </div>
+
+          {/* Airplane-mode escape hatch: while the offline simulation blocks the
+              API, signing in is impossible — surface WHY and offer the toggle
+              right here (the normal banner/topbar toggle lives behind auth). */}
+          {simulatedOffline && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              role="alert"
+              className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-3"
+            >
+              <WifiOff className="size-4 shrink-0 text-amber-600" aria-hidden="true" />
+              <div className="min-w-0 flex-1 text-xs leading-relaxed text-amber-700">
+                <span className="font-semibold">Airplane-mode simulation is on</span> — API calls are
+                blocked, so sign-in can't reach the server.
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="border-amber-500/40 text-amber-700 hover:bg-amber-500/10"
+                onClick={() => setSimulatedOffline(false)}
+              >
+                Turn off airplane mode
+              </Button>
+            </motion.div>
+          )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
             <div className="space-y-1.5">

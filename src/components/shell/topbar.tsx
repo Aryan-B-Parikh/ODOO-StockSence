@@ -1,7 +1,7 @@
 'use client'
 
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { LockKeyhole, Menu, RefreshCw } from 'lucide-react'
+import { LockKeyhole, Menu, RefreshCw, WifiOff } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useLockStore } from '@/stores/lock-store'
+import { useOfflineStore } from '@/stores/offline-store'
 import { useUIStore } from '@/stores/ui-store'
 
 import { NAV_BY_VIEW } from './nav'
@@ -27,6 +28,11 @@ export function Topbar() {
 
   const hasPin = useLockStore((s) => s.hasPin)
   const lock = useLockStore((s) => s.lock)
+
+  // Offline queue (Phase 2) — airplane-mode simulation toggle + queue depth badge.
+  const simulatedOffline = useOfflineStore((s) => s.simulatedOffline)
+  const queueCount = useOfflineStore((s) => s.queue.length)
+  const setSimulatedOffline = useOfflineStore((s) => s.setSimulatedOffline)
 
   const meta = NAV_BY_VIEW[view]
 
@@ -74,6 +80,39 @@ export function Topbar() {
       </div>
 
       <SearchCommand />
+
+      {/* Airplane-mode simulation toggle — amber when on, amber badge = queued actions */}
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn(
+                'relative size-9 shrink-0',
+                simulatedOffline &&
+                  'border-amber-500/50 bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300'
+              )}
+              onClick={() => setSimulatedOffline(!simulatedOffline)}
+              aria-label="Simulate offline (airplane mode)"
+              aria-pressed={simulatedOffline}
+            >
+              <WifiOff className="size-4" />
+              {queueCount > 0 && (
+                <span
+                  className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] leading-none font-bold text-amber-950"
+                  aria-hidden="true"
+                >
+                  {queueCount > 9 ? '9+' : queueCount}
+                </span>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            Simulate offline (airplane mode) — queued actions sync on reconnect
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <TooltipProvider delayDuration={200}>
         <Tooltip>

@@ -4,11 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { useState } from 'react'
 import { Toaster } from '@/components/ui/sonner'
+import { registerQueryClient } from '@/lib/query-client'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(
-    () =>
-      new QueryClient({
+    () => {
+      const c = new QueryClient({
         defaultOptions: {
           queries: {
             staleTime: 15_000,
@@ -17,6 +18,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
           },
         },
       })
+      // Expose the client to code outside the React tree (offline replay engine).
+      registerQueryClient(c)
+      return c
+    }
   )
 
   return (

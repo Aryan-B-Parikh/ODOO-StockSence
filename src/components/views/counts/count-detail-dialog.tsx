@@ -32,6 +32,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import { deltaColor, fmtSignedQty } from '@/lib/format'
+import { enqueueableMutation } from '@/lib/offline-replay'
 import type { CycleCountDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -81,12 +82,30 @@ function CountForm({ count, onDone }: { count: CycleCountDTO; onDone: () => void
   const canCount = permissions.includes('count')
 
   const submitMutation = useMutation({
+    // Offline-aware (Phase 2): an OfflineError (airplane-mode simulation or a
+    // real network drop) parks the submission in the device queue instead of
+    // failing — the replay engine syncs it and refreshes data on reconnect.
     mutationFn: (payload: { lines: { lineId: number; countedQty: number }[]; note?: string }) =>
-      api.post<CountSubmitResponse>(`/api/counts/${count.id}/submit`, payload),
+      enqueueableMutation({
+        label: `Count ${count.code} submission (${payload.lines.length} ${
+          payload.lines.length === 1 ? 'line' : 'lines'
+        })`,
+        method: 'POST',
+        path: `/api/counts/${count.id}/submit`,
+        body: payload,
+        submit: () => api.post<CountSubmitResponse>(`/api/counts/${count.id}/submit`, payload),
+      }),
     onSuccess: (res) => {
-      if (res.adjustment) {
+      if (res.queued) {
+        // Saved offline — no server response yet: close the dialog, skip
+        // the toasts/invalidations (the replay engine refreshes after sync).
+        onDone()
+        return
+      }
+      const { adjustment } = res.data
+      if (adjustment) {
         toast.warning(
-          `⚠ Variance found — adjustment ${res.adjustment.code} created (${res.adjustment.severity}): ${res.adjustment.explanation}`,
+          `⚠ Variance found — adjustment ${adjustment.code} created (${adjustment.severity}): ${adjustment.explanation}`,
           { duration: 10_000 }
         )
       } else {

@@ -1,13 +1,26 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { QrCode, Warehouse } from 'lucide-react'
+import { ChevronDown, Printer, QrCode, Warehouse } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { api } from '@/lib/api'
 import { fmtUSDCompact } from '@/lib/format'
-import type { DashboardDTO } from '@/lib/types'
+import { generateQrMatrix } from '@/lib/qr-matrix'
+import type { DashboardDTO, MetaDTO } from '@/lib/types'
 
 import { fadeUp, staggerContainer } from './motion'
+import { groupLocationsByRack, useRackLabelPrint } from './rack-label-print'
 
 type Rack = DashboardDTO['racks'][number]
 
@@ -24,24 +37,11 @@ function fillStyle(rack: Rack): React.CSSProperties {
 /**
  * Deterministic "QR sticker" placeholder — the scannable label every rack
  * carries (Phase 2: QR codes map to the zone/rack/shelf hierarchy). Rendered
- * as a pseudo-random but stable dot matrix seeded from the rack code, framed
- * with quiet-zone corners like a real label.
+ * from the shared FNV-1a dot-matrix generator (src/lib/qr-matrix.ts) so the
+ * on-screen sticker and the printed label are pixel-for-pixel identical.
  */
 function QrSticker({ seed }: { seed: string }) {
-  // FNV-1a hash → deterministic 12×12 dot matrix
-  let h = 2166136261 >>> 0
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i)
-    h = Math.imul(h, 16777619) >>> 0
-  }
-  const cells: boolean[] = []
-  let a = h >>> 0
-  for (let i = 0; i < 144; i++) {
-    a = (Math.imul(a ^ (a >>> 15), 1 | a) | 0) >>> 0
-    cells.push(((a ^ (a >>> 13)) & 1) === 1)
-  }
-  const isFinder = (r: number, c: number) =>
-    (r < 3 && c < 3) || (r < 3 && c > 8) || (r > 8 && c < 3)
+  const cells = generateQrMatrix(seed)
   return (
     <div
       className="grid size-9 shrink-0 grid-cols-12 gap-px rounded-[4px] bg-foreground p-[3px] shadow-sm"
@@ -49,13 +49,66 @@ function QrSticker({ seed }: { seed: string }) {
       aria-label={`QR location label ${seed}`}
       title={`Scan-to-open: ${seed}`}
     >
-      {cells.map((on, i) => {
-        const r = Math.floor(i / 12)
-        const c = i % 12
-        const lit = isFinder(r, c) ? (r === 1 && c > 0 && c < 11) || (c === 1) || (r === 10 && c < 3) ? false : true : on
-        return <span key={i} className={lit ? 'bg-background' : 'bg-foreground'} aria-hidden="true" />
-      })}
+      {cells.map((lit, i) => (
+        <span key={i} className={lit ? 'bg-background' : 'bg-foreground'} aria-hidden="true" />
+      ))}
     </div>
+  )
+}
+
+/**
+ * "Print labels" dropdown — printable QR stickers for the zone/rack/shelf
+ * hierarchy (Phase 2): one label per shelf location, all racks or per rack.
+ */
+function LabelsMenu() {
+  const { print, portal, printing } = useRackLabelPrint()
+  const { data: meta } = useQuery({
+    queryKey: ['meta'],
+    queryFn: () => api.get<MetaDTO>('/api/meta'),
+    staleTime: 60_000,
+  })
+  const rackGroups = meta ? groupLocationsByRack(meta.locations) : []
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-1.5" aria-label="Print QR rack labels">
+            <Printer className="size-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Labels</span>
+            <ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuLabel>Print QR location labels</DropdownMenuLabel>
+          <DropdownMenuItem onSelect={() => void print({ kind: 'ALL' })}>
+            <QrCode className="size-4" aria-hidden="true" />
+            <div className="flex min-w-0 flex-col">
+              <span className="font-medium">All racks</span>
+              <span className="text-xs text-muted-foreground">
+                {meta ? `${meta.locations.length} shelf labels` : 'loading…'}
+              </span>
+            </div>
+          </DropdownMenuItem>
+          {rackGroups.length > 0 && <DropdownMenuSeparator />}
+          {rackGroups.map((g) => (
+            <DropdownMenuItem key={g.rackCode} onSelect={() => void print({ kind: 'RACK', rackCode: g.rackCode })}>
+              <Warehouse className="size-4" aria-hidden="true" />
+              <div className="flex min-w-0 flex-col">
+                <span className="font-medium">Rack {g.rackCode}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {g.zoneName} · {g.count} {g.count === 1 ? 'label' : 'labels'}
+                </span>
+              </div>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {portal}
+      <span className="sr-only" role="status">
+        {printing ? 'Preparing label sheet for printing' : ''}
+      </span>
+    </>
   )
 }
 
@@ -65,14 +118,20 @@ export function RackGrid({ racks }: { racks: DashboardDTO['racks'] }) {
     <motion.section variants={fadeUp} initial="hidden" animate="visible" aria-label="Rack floor plan">
       <Card className="gap-4">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Warehouse className="size-4 text-primary" aria-hidden="true" />
-            Rack Floor Plan
-          </CardTitle>
-          <CardDescription className="flex items-center gap-1.5">
-            <QrCode className="size-3" aria-hidden="true" />
-            On-hand value density across racks — every rack carries a QR label mapping to its zone/rack/shelf hierarchy
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Warehouse className="size-4 text-primary" aria-hidden="true" />
+                Rack Floor Plan
+              </CardTitle>
+              <CardDescription className="flex items-center gap-1.5">
+                <QrCode className="size-3" aria-hidden="true" />
+                On-hand value density across racks — every rack carries a QR label mapping to its
+                zone/rack/shelf hierarchy
+              </CardDescription>
+            </div>
+            <LabelsMenu />
+          </div>
         </CardHeader>
         <CardContent>
           {racks.length === 0 ? (

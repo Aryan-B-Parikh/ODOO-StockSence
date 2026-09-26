@@ -179,4 +179,86 @@
     border: 0.75pt solid #000;
     background: transparent;
   }
+
+  /* --- rack & shelf QR label sheets (Phase 2 printable stickers) -------- */
+
+  /* Cut-here grid: 2 label columns per page. */
+  .ps-label-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6mm;
+    margin-top: 5mm;
+  }
+
+  /* One self-adhesive-style label: dashed cut border, QR left, text right. */
+  .ps-label {
+    display: flex;
+    align-items: center;
+    gap: 5mm;
+    border: 0.5pt dashed #000;
+    padding: 4.5mm;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .ps-label-text {
+    min-width: 0;
+  }
+
+  /* The QR matrix itself — fixed physical size so scans are predictable. */
+  .ps-label-qr {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    width: 27mm;
+    height: 27mm;
+    padding: 1.2mm;
+    border: 0.5pt solid #000;
+    flex-shrink: 0;
+  }
+
+  .ps-label-qr span {
+    /* tiny gaps so neighbouring dots stay distinguishable on paper */
+    margin: 0.12mm;
+  }
+
+  .ps-qr-on {
+    background: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .ps-qr-off {
+    background: #fff !important;
+  }
+
+  .ps-label-zone {
+    font-size: 7.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .ps-label-rack {
+    font-size: 19pt;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    line-height: 1.1;
+    margin: 0.5mm 0;
+  }
+
+  .ps-label-sep {
+    font-weight: 400;
+    color: #444;
+  }
+
+  .ps-label-path {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 8.5pt;
+  }
+
+  .ps-label-caption {
+    font-size: 7pt;
+    color: #333;
+    margin-top: 0.8mm;
+  }
 }

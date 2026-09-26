@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import { fmtQty } from '@/lib/format'
+import { enqueueableMutation } from '@/lib/offline-replay'
 import type { AdjustmentDTO, MetaDTO, ProductDTO, ProductListDTO, StockByLocationDTO } from '@/lib/types'
 
 interface DraftLine {
@@ -84,8 +85,11 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
   const valid = reasonIssue === null && lines.length > 0 && lines.every(lineValid)
 
   const create = useMutation({
-    mutationFn: () =>
-      api.post<CreateAdjustmentResponse>('/api/adjustments', {
+    // Offline-aware (Phase 2): an OfflineError (airplane-mode simulation or a
+    // real network drop) parks the adjustment in the device queue instead of
+    // failing — the replay engine syncs it and refreshes data on reconnect.
+    mutationFn: () => {
+      const body = {
         reason: reason.trim(),
         note: note.trim() || undefined,
         lines: lines.map((l) => ({
@@ -93,16 +97,32 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
           locationId: l.locationId!,
           countedQty: Number(l.countedQty),
         })),
-      }),
+      }
+      return enqueueableMutation({
+        label: `Adjustment "${reason.trim()}" (${lines.length} ${lines.length === 1 ? 'line' : 'lines'})`,
+        method: 'POST',
+        path: '/api/adjustments',
+        body,
+        submit: () => api.post<CreateAdjustmentResponse>('/api/adjustments', body),
+      })
+    },
     onSuccess: (res) => {
+      if (res.queued) {
+        // Saved offline — no server response yet: close the dialog, skip
+        // the toasts/invalidations (the replay engine refreshes after sync).
+        reset()
+        onOpenChange(false)
+        return
+      }
+      const { adjustment, explanation, flagsCreated, severity } = res.data
       // The engine's explanation is the star — show it verbatim with the severity.
-      const description = `${res.adjustment.code} · Severity: ${res.severity}${res.flagsCreated.length > 0 ? ' · review flag opened' : ''}`
-      if (res.severity === 'HIGH') {
-        toast.warning(res.explanation, { description })
-      } else if (res.severity === 'MEDIUM') {
-        toast.warning(res.explanation, { description })
+      const description = `${adjustment.code} · Severity: ${severity}${flagsCreated.length > 0 ? ' · review flag opened' : ''}`
+      if (severity === 'HIGH') {
+        toast.warning(explanation, { description })
+      } else if (severity === 'MEDIUM') {
+        toast.warning(explanation, { description })
       } else {
-        toast.success(res.explanation, { description })
+        toast.success(explanation, { description })
       }
       for (const key of ['adjustments', 'products', 'dashboard']) {
         void qc.invalidateQueries({ queryKey: [key] })
