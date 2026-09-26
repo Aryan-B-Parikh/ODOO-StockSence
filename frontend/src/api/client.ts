@@ -31,6 +31,16 @@ export interface RequestOptions {
   token?: string | null;
 }
 
+/** Serializes defined, non-empty params into a query string ('' when none). */
+export function buildQuery(params: object): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params as Record<string, unknown>)) {
+    if (value !== undefined && value !== null && value !== '') search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
 /** Thin fetch wrapper honoring the standard error shape (05_API_CONTRACTS.md §0). */
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};

@@ -1,6 +1,6 @@
 // StockSense — Prisma schema.
 // Source of truth: docs/04_DATABASE_SCHEMA.md. Migrations are added phase by phase
-// (Phase 1 ships users + otp_requests only).
+// (Phase 1: users + otp_requests; Phase 2: inventory core).
 
 generator client {
   provider = "prisma-client-js"
@@ -22,6 +22,7 @@ model User {
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
   otpRequests  OtpRequest[]
+  stockMoves   StockMove[]
 
   @@map("users")
 }
@@ -38,4 +39,182 @@ model OtpRequest {
 
   @@index([userId])
   @@map("otp_requests")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §warehouses
+model Warehouse {
+  id               String            @id @default(uuid()) @db.Uuid
+  name             String            @db.VarChar(255)
+  shortCode        String            @unique @map("short_code") @db.VarChar(10)
+  address          String?           @db.Text
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  locations        Location[]
+  sequenceCounters SequenceCounter[]
+  stockMoves       StockMove[]
+
+  @@map("warehouses")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §locations — BR29 (warehouse immutable after creation)
+model Location {
+  id             String       @id @default(uuid()) @db.Uuid
+  warehouseId    String       @map("warehouse_id") @db.Uuid
+  name           String       @db.VarChar(255)
+  shortCode      String       @map("short_code") @db.VarChar(10)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  warehouse      Warehouse    @relation(fields: [warehouseId], references: [id])
+  stock          Stock[]
+  stockMovesFrom StockMove[]  @relation("StockMoveFromLocation")
+  stockMovesTo   StockMove[]  @relation("StockMoveToLocation")
+  ledgerFrom     StockLedger[] @relation("LedgerFromLocation")
+  ledgerTo       StockLedger[] @relation("LedgerToLocation")
+
+  @@unique([warehouseId, shortCode])
+  @@map("locations")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §categories
+model Category {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @unique @db.VarChar(255)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  products  Product[]
+
+  @@map("categories")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §products — BR28 (unique SKU)
+model Product {
+  id             String          @id @default(uuid()) @db.Uuid
+  name           String          @db.VarChar(255)
+  sku            String          @unique @db.VarChar(64)
+  categoryId     String?         @map("category_id") @db.Uuid
+  uom            String          @db.VarChar(30)
+  costPerUnit    Decimal?        @map("cost_per_unit") @db.Decimal(12, 2)
+  reorderMin     Decimal?        @map("reorder_min") @db.Decimal(12, 2)
+  reorderMax     Decimal?        @map("reorder_max") @db.Decimal(12, 2)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  category       Category?       @relation(fields: [categoryId], references: [id])
+  stock          Stock[]
+  stockMoveLines StockMoveLine[]
+  stockLedger    StockLedger[]
+
+  @@map("products")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §contacts (used by Receipts/Deliveries from Phase 3)
+model Contact {
+  id          String        @id @default(uuid()) @db.Uuid
+  name        String        @db.VarChar(255)
+  type        String        @db.VarChar(20)
+  email       String?       @db.VarChar(255)
+  phone       String?       @db.VarChar(30)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  stockMoves  StockMove[]
+  stockLedger StockLedger[]
+
+  @@map("contacts")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §stock — BR11 (free_to_use computed, never stored)
+model Stock {
+  id          String   @id @default(uuid()) @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  locationId  String   @map("location_id") @db.Uuid
+  onHandQty   Decimal  @default(0) @map("on_hand_qty") @db.Decimal(14, 3)
+  reservedQty Decimal  @default(0) @map("reserved_qty") @db.Decimal(14, 3)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  product     Product  @relation(fields: [productId], references: [id])
+  location    Location @relation(fields: [locationId], references: [id])
+
+  @@unique([productId, locationId])
+  @@map("stock")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §sequence_counters — BR7-BR9 reference numbering
+model SequenceCounter {
+  id            String    @id @default(uuid()) @db.Uuid
+  warehouseId   String    @map("warehouse_id") @db.Uuid
+  operationType String    @map("operation_type") @db.VarChar(10)
+  lastNumber    Int       @default(0) @map("last_number")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  warehouse     Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@unique([warehouseId, operationType])
+  @@map("sequence_counters")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §stock_moves — shared header for all four operation types.
+/// `note` is a Phase 2 additive column (PATCH /stock accepts a note per 05 §3 and the
+/// Phase 4 Adjustment form has an optional reason — see 14_CHANGELOG.md).
+model StockMove {
+  id                String          @id @default(uuid()) @db.Uuid
+  reference         String          @unique @db.VarChar(40)
+  type              String          @db.VarChar(10)
+  warehouseId       String          @map("warehouse_id") @db.Uuid
+  fromLocationId    String?         @map("from_location_id") @db.Uuid
+  toLocationId      String?         @map("to_location_id") @db.Uuid
+  contactId         String?         @map("contact_id") @db.Uuid
+  operationType     String?         @map("operation_type") @db.VarChar(30)
+  scheduleDate      DateTime        @map("schedule_date") @db.Date
+  responsibleUserId String          @map("responsible_user_id") @db.Uuid
+  status            String          @db.VarChar(15)
+  note              String?         @db.Text
+  /// Phase 4: recorded/counted quantities for ADJUSTMENT moves (§9 list/detail).
+  recordedQuantity  Decimal?        @map("recorded_quantity") @db.Decimal(14, 3)
+  countedQuantity   Decimal?        @map("counted_quantity") @db.Decimal(14, 3)
+  validatedAt       DateTime?       @map("validated_at") @db.Timestamptz(6)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  warehouse         Warehouse       @relation(fields: [warehouseId], references: [id])
+  fromLocation      Location?       @relation("StockMoveFromLocation", fields: [fromLocationId], references: [id])
+  toLocation        Location?       @relation("StockMoveToLocation", fields: [toLocationId], references: [id])
+  contact           Contact?        @relation(fields: [contactId], references: [id])
+  responsibleUser   User            @relation(fields: [responsibleUserId], references: [id])
+  lines             StockMoveLine[]
+  ledgerEntries     StockLedger[]
+
+  @@index([status, scheduleDate])
+  @@map("stock_moves")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §stock_move_lines — BR27 (quantity > 0)
+model StockMoveLine {
+  id          String    @id @default(uuid()) @db.Uuid
+  stockMoveId String    @map("stock_move_id") @db.Uuid
+  productId   String    @map("product_id") @db.Uuid
+  quantity    Decimal   @db.Decimal(14, 3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  stockMove   StockMove @relation(fields: [stockMoveId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id])
+
+  @@map("stock_move_lines")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §stock_ledger — append-only audit log (BR16, R11.4)
+model StockLedger {
+  id             String    @id @default(uuid()) @db.Uuid
+  stockMoveId    String    @map("stock_move_id") @db.Uuid
+  reference      String    @db.VarChar(40)
+  productId      String    @map("product_id") @db.Uuid
+  fromLocationId String?   @map("from_location_id") @db.Uuid
+  toLocationId   String?   @map("to_location_id") @db.Uuid
+  contactId      String?   @map("contact_id") @db.Uuid
+  quantity       Decimal   @db.Decimal(14, 3)
+  direction      String    @db.VarChar(3)
+  movedAt        DateTime  @map("moved_at") @db.Timestamptz(6)
+  stockMove      StockMove @relation(fields: [stockMoveId], references: [id], onDelete: Cascade)
+  product        Product   @relation(fields: [productId], references: [id])
+  fromLocation   Location? @relation("LedgerFromLocation", fields: [fromLocationId], references: [id])
+  toLocation     Location? @relation("LedgerToLocation", fields: [toLocationId], references: [id])
+  contact        Contact?  @relation(fields: [contactId], references: [id])
+
+  @@index([productId, movedAt])
+  @@index([reference])
+  @@map("stock_ledger")
 }

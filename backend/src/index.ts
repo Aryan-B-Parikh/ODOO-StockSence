@@ -7,7 +7,7 @@ import { getPrisma } from './lib/prisma.js';
 async function main(): Promise<void> {
   const config = loadConfig();
   const prisma = getPrisma(config.databaseUrl);
-  const app = createApp({ config, store: new PrismaAuthStore(prisma) });
+  const app = createApp({ config, store: new PrismaAuthStore(prisma), prisma });
 
   app.listen(config.port, () => {
     console.log(`[api] StockSense API listening on http://localhost:${config.port}/api/v1`);

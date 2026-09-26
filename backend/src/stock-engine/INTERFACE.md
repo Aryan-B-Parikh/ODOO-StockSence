@@ -1,47 +1,42 @@
-# Stock-engine interface (Phase 1 draft)
+# Stock-engine interface
 
-**Status:** drafted by Person 3, Phase 1 — signatures only, no implementation.
-**Implementation owner:** Person 1, Phase 2 (`backend/src/stock-engine/`).
-**Consumers:** Person 3's receipts/deliveries/transfers/adjustments modules (Phase 3/4),
-Person 4's dashboard/move-history reads (Phase 4).
+**Status:** Phase 2 — implemented (`stock-engine.ts`, `reference.ts`, `adjustment.ts`).
+**Implemented by:** Person 1. **Domain contract drafted by:** Person 3 (Phase 1).
+**Consumers:** catalog/stock modules (Phase 2), receipts/deliveries/transfers/adjustments
+(Phase 3/4), dashboard/move-history reads (Person 4).
 
-Types live in `interface.ts`. This document is the review artifact required by
-`08_PHASE_PLAN.md` Phase 1 §5 ("Draft the shared stock-engine interface … that Person 1
-will build in Phase 2").
+Types live in `interface.ts`. Every method accepts an optional `db` handle
+(`PrismaClient` or an open `$transaction` client) so multi-line document validation can run the
+status transition, all stock changes and all ledger rows in ONE transaction.
 
 ## Function contracts
 
 | Function | Business rule | Transaction semantics |
 |---|---|---|
-| `getStock(productId, locationId)` | BR11 (`freeToUse = onHand - reserved`, computed) | read-only |
-| `increaseOnHand({ productId, locationId, quantity, move })` | BR12 (receipt validation) | increments `stock.on_hand_qty`; writes 1 IN `stock_ledger` row; same transaction as the move's status transition |
-| `decreaseOnHand({ productId, locationId, quantity, move })` | BR13 (delivery validation) | decrements `stock.on_hand_qty`; writes 1 OUT ledger row; throws `CONFLICT` if on-hand would go below 0 |
-| `transfer({ productId, fromLocationId, toLocationId, quantity, move })` | BR14 + BR16 | decrement + increment in **one** DB transaction; writes 2 ledger rows per line (OUT + IN legs); total stock unchanged |
-| `setOnHandFromCount({ productId, locationId, countedQuantity, move })` | BR15 | sets `on_hand_qty = countedQuantity`; 1 ledger row when `delta ≠ 0`, none when `delta = 0` |
-| `reserve(...)` / `releaseReservation(...)` | BR11/BR17 support | open question, see below |
+| `getStock(productId, locationId, db?)` | BR11 (`freeToUse = onHand - reserved`, computed) | read-only |
+| `increaseOnHand({ productId, locationId, quantity, move }, db?)` | BR12 (receipt validation) | atomic upsert + increment; writes 1 IN `stock_ledger` row |
+| `decreaseOnHand({ productId, locationId, quantity, move }, db?)` | BR13 (delivery validation) | atomic conditional decrement; writes 1 OUT ledger row; `CONFLICT` if on-hand would go below 0 |
+| `transfer({ productId, fromLocationId, toLocationId, quantity, move }, db?)` | BR14 + BR16 | atomic source decrement + destination increment; 2 ledger rows (OUT + IN legs); `CONFLICT` when free-to-use is short |
+| `setOnHandFromCount({ productId, locationId, countedQuantity, move? }, db?)` | BR15 | sets `on_hand_qty = countedQuantity`; 1 ledger row when `delta ≠ 0` (none when `delta = 0`) |
+| `reserve(...)` / `releaseReservation(...)` | BR11/BR17 primitives | atomic conditional `reserved_qty` update; no ledger rows (reservations do not move stock) |
+| `ReferenceGenerator.next(warehouseId, op, db?)` | BR7–BR9 | single-statement atomic upsert of `sequence_counters`, formatted as `<WH>/<OP>/0001` |
 
-## Reference generator (`sequence` module)
+## Phase 2 decisions
 
-`ReferenceGenerator.next(warehouseId, operationType)` implements BR7–BR9:
-`<WarehouseShortCode>/<OP>/<0001>`, `OP ∈ {IN, OUT, INT, ADJ}`, atomic increment of
-`sequence_counters.last_number` in the same transaction as document creation, immutable and
-never reused (including after Cancel).
-
-## Open questions for Person 1 / Phase 3 kickoff
-
-1. **`reserved_qty` lifecycle is unspecified.** `04_DATABASE_SCHEMA.md` defines `reserved_qty`
-   as "allocated to open Delivery/Transfer lines" and BR11 defines the `freeToUse` formula,
-   but no BR states exactly when a reservation is created, when it is released, or whether
-   Delivery `WAITING` uses `on_hand` or `freeToUse` (BR17 says `freeToUse`). Phase 1 decision:
-   `reserved_qty` stays 0 until Person 1/Person 3 agree on the lifecycle at Phase 3 kickoff.
-   Flagged, not silently chosen.
-2. **Delivery validate on insufficient stock (BR13) vs WAITING (BR17).** Interface returns a
-   `CONFLICT` error; Phase 3 must confirm the caller keeps the move in `WAITING` rather than
-   rolling it back to a broken state.
-3. **Adjustment ledger `moved_at`.** Adjustments have no `validated_at` transition, so the
-   caller passes `movedAt` explicitly.
+1. **`reserved_qty` stays 0 in Phase 2.** No Phase 2 endpoint creates reservations, so
+   `freeToUse == onHand` throughout the Phase 2 UI. The reserve/release primitives exist and are
+   tested; the *policy* for when open Delivery/Transfer lines reserve stock remains an open
+   question for Phase 3 kickoff (BR11 defines the formula, BR17 defines the waiting check, but
+   no rule states when a reservation is taken/released).
+2. **Initial stock and manual stock edits are `ADJUSTMENT` stock_moves** (status `DONE`) created
+   by `applyStockAdjustment()`, so every `stock_ledger.stock_move_id` points at a real document
+   (BR16) and the reference pattern `<WH>/ADJ/<seq>` applies (BR7). `PATCH /stock` documents this
+   in 05 §3; product `initialStock` reuses the same mechanism (05 §2).
+3. **Delta 0 is a no-op for the ledger** (BR15) — the stock row is still ensured so the
+   product/location pair stays visible in the Stock tab.
 
 ## Sign-off
 
-- [ ] Person 1 (implementation owner) confirms signatures before Phase 2 stock-engine work
-- [ ] Person 3 (domain owner) confirms BR mapping before Phase 3 receipts/deliveries work
+- [x] Person 1 implementation matches the Phase 1 signatures + documented `db` extension.
+- [x] Person 3 BR mapping verified by the Phase 2 integration tests
+  (`backend/tests/integration/phase2.integration.test.ts`, engine invariants test).

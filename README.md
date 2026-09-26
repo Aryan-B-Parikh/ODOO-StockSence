@@ -3,7 +3,11 @@
 4-person hackathon MVP built from the requirements/mockup documentation in `docs/` (start with
 `docs/00_PROJECT_OVERVIEW.md` and the single-file `docs/MASTER_EXECUTION_PLAN.md`).
 
-**Current status:** Phase 1 — Foundation + Authentication (see `docs/08_PHASE_PLAN.md`).
+**Current status:** Phase 4 — complete. All four phases (Authentication; Products/Stock/
+Warehouses/Locations/Dashboard; Receipts/Deliveries; Transfers/Adjustments/Move History/
+Settings/Profile) are implemented, integrated and verified. See `docs/08_PHASE_PLAN.md`, the
+final QA sign-off in `docs/reviews/PHASE4_FINAL_QA.md`, and `docs/DEPLOYMENT.md` for the demo
+deployment path.
 
 ## Repository layout
 
@@ -42,6 +46,7 @@ automatically.
 cp backend/.env.example backend/.env    # then edit DATABASE_URL / JWT_SECRET
 npm install
 npm run prisma:migrate --workspace @stocksense/backend    # apply migrations
+npm run seed --workspace @stocksense/backend              # optional demo data
 npm run dev:backend
 ```
 
@@ -72,15 +77,42 @@ $env:RUN_DB_TESTS="1"
 npm run test --workspace @stocksense/backend
 ```
 
-## Auth smoke test
+## Seed data
+
+The canonical demo dataset (also used by the tests) creates:
+
+- demo user `demo01` / `Demo@123!`
+- categories (Steel, Tools, Packaging), 6 products with reorder rules and mixed stock
+- 2 warehouses with 4 locations, vendor/customer contacts
+- DONE receipts/delivery plus open documents so every Dashboard KPI is non-zero
+
+```bash
+npm run seed --workspace @stocksense/backend                # skip if demo data exists
+# or inside Docker:
+docker compose exec backend npm run seed
+```
+
+`SEED_RESET=1 npm run seed --workspace @stocksense/backend` wipes inventory tables (never auth
+data) before seeding.
+
+## Smoke tests
 
 With the stack running (Docker or native):
 
 ```bash
 node scripts/smoke-auth.mjs          # or: bash scripts/smoke-auth.sh
+node scripts/smoke-phase2.mjs        # or: bash scripts/smoke-phase2.sh
+node scripts/smoke-phase3.mjs        # or: bash scripts/smoke-phase3.sh
+node scripts/smoke-phase4.mjs        # or: bash scripts/smoke-phase4.sh
 ```
 
-Exercises signup → login → /auth/me → OTP request → OTP reset → login with new password.
+- `smoke-auth` — signup → login → /auth/me → OTP request → OTP reset → login with new password.
+- `smoke-phase2` — category → warehouse → location → product with initial stock → stock search +
+  flags → manual stock edit → dashboard KPIs and filters.
+- `smoke-phase3` — contacts → receipt Draft→Ready→Done (stock up) → delivery reservation →
+  Pick & Pack → Validate (stock down) → WAITING → receipt promotes it to Ready → cancel.
+- `smoke-phase4` — full lifecycle: receipt (+10) → internal transfer (total unchanged, two ledger
+  legs) → delivery (−20) → adjustment (−2) → Move History filters → dashboard KPIs.
 
 ## Working agreements
 

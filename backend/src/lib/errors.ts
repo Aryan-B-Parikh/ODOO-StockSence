@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { NextFunction, Request, Response } from 'express';
 import type { ApiErrorCode } from '@stocksense/shared';
 
@@ -54,6 +55,16 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   if (err instanceof SyntaxError && 'body' in err) {
     res.status(400).json({
       error: { code: 'VALIDATION_ERROR', message: 'Invalid JSON body' },
+    });
+    return;
+  }
+
+  // Unique-constraint races (e.g. two concurrent creates of the same code) become CONFLICT
+  // instead of an opaque 500; the services still return field-level VALIDATION_ERRORs on the
+  // normal duplicate path.
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    res.status(409).json({
+      error: { code: 'CONFLICT', message: 'A record with this unique value already exists' },
     });
     return;
   }

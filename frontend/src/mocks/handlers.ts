@@ -6,6 +6,7 @@ import {
   otpVerifyResetSchema,
   signupSchema,
 } from '@stocksense/shared';
+import { unauthorized, validationError } from './http';
 import {
   MOCK_OTP,
   MOCK_TOKEN,
@@ -16,24 +17,13 @@ import {
   toCurrentUser,
   updateMockUser,
 } from './fixtures/auth';
+import { inventoryHandlers } from './inventoryHandlers';
+import { operationsHandlers } from './operationsHandlers';
 
 const API = '*/api/v1/auth';
 
-function validationError(fields: Record<string, string>, message = 'Validation failed') {
-  return HttpResponse.json({ error: { code: 'VALIDATION_ERROR', message, fields } }, { status: 400 });
-}
-
-function unauthorized(message: string) {
-  return HttpResponse.json({ error: { code: 'UNAUTHORIZED', message } }, { status: 401 });
-}
-
-function bearerToken(request: Request): string | null {
-  const header = request.headers.get('Authorization');
-  if (!header?.startsWith('Bearer ')) return null;
-  return header.slice('Bearer '.length).trim();
-}
-
-export const handlers = [
+/** 05_API_CONTRACTS.md §1 — Auth */
+const authHandlers = [
   http.post(`${API}/signup`, async ({ request }) => {
     const body = await request.json().catch(() => ({}));
     const parsed = signupSchema.safeParse(body);
@@ -94,13 +84,13 @@ export const handlers = [
   }),
 
   http.get(`${API}/me`, ({ request }) => {
-    const token = bearerToken(request);
+    const token = request.headers.get('Authorization')?.replace('Bearer ', '').trim();
     if (token !== MOCK_TOKEN) return unauthorized('Missing Authorization header');
     return HttpResponse.json(toCurrentUser(currentMockUser()));
   }),
 
   http.patch(`${API}/me`, async ({ request }) => {
-    const token = bearerToken(request);
+    const token = request.headers.get('Authorization')?.replace('Bearer ', '').trim();
     if (token !== MOCK_TOKEN) return unauthorized('Missing Authorization header');
 
     const body = (await request.json().catch(() => ({}))) as {
@@ -124,3 +114,5 @@ export const handlers = [
     return HttpResponse.json(toCurrentUser(updated));
   }),
 ];
+
+export const handlers = [...authHandlers, ...inventoryHandlers, ...operationsHandlers];

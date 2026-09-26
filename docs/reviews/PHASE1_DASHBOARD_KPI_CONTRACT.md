@@ -51,3 +51,14 @@ Phase 2 kickoff.
 `stock_moves`/`stock_ledger` are typed in the schema now but stay empty until Phase 3, so the
 Phase 2 implementation is built and tested against the canonical seed script
 (`11_TESTING_STRATEGY.md`), then regression-checked against real Phase 3 data.
+
+## Phase 2 resolution (2026-09-26)
+
+The open questions above are closed by `PHASE2_DECISIONS.md`:
+1. `toReceive`/`toDeliver` = open documents with `schedule_date <= today` (partitions the open
+   set together with `late` and `operations`).
+2. `totalProductsInStock` = distinct products with summed on-hand `> 0` in scope.
+3. `type`/`status` filter params added to the endpoint (05 §5 amendment) so R2.7/R2.8 filters
+   change the returned numbers.
+The endpoint is implemented, the seed provides non-zero demo data, and the warehouse/category/
+type/status filters are covered by the Phase 2 integration tests.

@@ -69,9 +69,15 @@ Res 201: product object. Errors: `VALIDATION_ERROR` (sku uniqueness).
 ---
 
 ## §3. Stock (Owner: Person 1) — Phase 2
-### `GET /stock?search=&locationId=&warehouseId=`
-Res 200: list of `{ productId, productName, sku, costPerUnit, locationId, onHand, reserved,
-freeToUse }` (`freeToUse = onHand - reserved`, IMG:13).
+### `GET /stock?search=&locationId=&warehouseId=&page=&pageSize=`
+Res 200: `{ data, total, page, pageSize }` (§0 envelope) where each item is
+`{ productId, productName, sku, costPerUnit, locationId, onHand, reserved, freeToUse, reorderMin,
+lowStock, outOfStock }` (`freeToUse = onHand - reserved`, IMG:13).
+
+> **Phase 2 amendment (see `docs/reviews/PHASE2_DECISIONS.md` §4):** `reorderMin`, `lowStock`
+> and `outOfStock` are additive fields added so the Stock tab can render low/out-of-stock badges
+> (R2.3/R11.1). `lowStock`/`outOfStock` use the BR22 product-level rule (summed across locations):
+> `lowStock = reorderMin != null && totalOnHand <= reorderMin`, `outOfStock = totalOnHand <= 0`.
 
 ### `PATCH /stock/:productId/:locationId`
 Manual stock edit from the Stock tab (R4.7). Internally creates a `stock_ledger` entry of type
@@ -88,10 +94,29 @@ Req: `{ "onHand": number, "note"?: string }` → Res 200: updated stock row.
 ### `GET /locations?warehouseId=` / `POST /locations` / `PATCH /locations/:id`
 `{ id, warehouseId, name, shortCode }`
 
+### §4b. Contacts (Phase 3 addition — see `docs/reviews/PHASE3_DECISIONS.md` §4)
+
+> §6/§7 require `fromContactId`/`toContactId` but the frozen contract had no way to list or
+> create contacts. Phase 3 adds:
+
+### `GET /contacts?type=VENDOR|CUSTOMER&search=`
+Res 200: array of `{ id, name, type, email, phone }` (ordered by name).
+
+### `POST /contacts`
+Req: `{ name, type, email?, phone? }` → Res 201: `{ id, name, type, email, phone }`.
+Errors: `VALIDATION_ERROR` (fields: name, type, email).
+
 ---
 
 ## §5. Dashboard (Owner: Person 4, consumes Person 1 + Person 3 data) — Phase 2/3
-### `GET /dashboard/kpis?warehouseId=&locationId=&categoryId=`
+### `GET /dashboard/kpis?warehouseId=&locationId=&categoryId=&type=&status=`
+
+> **Phase 2 amendment (see `docs/reviews/PHASE2_DECISIONS.md` §3):** `type`
+> (`RECEIPT|DELIVERY|TRANSFER|ADJUSTMENT`) and `status`
+> (`DRAFT|WAITING|READY|DONE|CANCELED`) are optional filters implementing the R2.7/R2.8 dynamic
+> filters. Every count is computed over the moves matching all supplied filters; an explicit
+> `status` replaces the default open predicate (`NOT IN (DONE, CANCELED)`).
+
 Res 200:
 ```json
 {
@@ -109,15 +134,22 @@ Definitions of `late`/`operations`/`waiting` per R2.13–R2.15.
 ---
 
 ## §6. Receipts (Owner: Person 3) — Phase 3
-### `GET /receipts?search=&status=&page=&pageSize=`
-Res 200 item: `{ id, reference, fromContactId, fromContactName, toLocationId, toLocationName,
-scheduleDate, status, responsibleUserId }`
+### `GET /receipts?search=&status=&warehouseId=&page=&pageSize=`
+Res 200: `{ data, total, page, pageSize }` (§0 envelope). Item:
+`{ id, reference, fromContactId, fromContactName, fromContactEmail, toLocationId, toLocationName,
+scheduleDate, status, warehouseId, responsibleUserId }`
+
+> **Phase 3 amendment (`PHASE3_DECISIONS.md` §8):** optional `warehouseId` scope filter; list
+> items add `fromContactEmail`/`warehouseId` (additive). `search` matches reference or supplier
+> name (R5.5).
 
 ### `POST /receipts`
 Req: `{ fromContactId, toLocationId, scheduleDate, responsibleUserId?, lines: [{ productId, quantity }] }`
 Res 201: full receipt incl. generated `reference` (Draft status).
 
-### `GET /receipts/:id` — full detail incl. `lines: [{ id, productId, productName, quantity }]`.
+### `GET /receipts/:id` — full detail. Lines:
+`[{ id, productId, productName, sku, uom, quantity }]`; detail adds `responsibleUserName`,
+`validatedAt`, `createdAt`, `note` (additive, `PHASE3_DECISIONS.md` §8).
 
 ### `PATCH /receipts/:id` — edit fields/lines while status is `DRAFT` or `READY`.
 
@@ -128,14 +160,22 @@ line via the stock-engine, writes `stock_ledger` rows (R5.3, R5.11).
 
 ### `POST /receipts/:id/cancel` — → Canceled (from Draft/Ready only).
 
-### `GET /receipts/:id/print` — returns a print-ready payload/PDF once status = Done (R5.12).
+### `GET /receipts/:id/print` — once status = Done (R5.12) returns
+`{ type: "RECEIPT", reference, status, date, contactName, locationName, lines: [{ productName,
+sku, uom, quantity }] }`; `CONFLICT` before Done. (Same shape for deliveries with
+`type: "DELIVERY"`.)
 
 ---
 
 ## §7. Deliveries (Owner: Person 3) — Phase 3
-### `GET /deliveries?search=&status=`
-Res 200 item: `{ id, reference, fromLocationId, fromLocationName, toContactId, toContactName,
-scheduleDate, status, operationType }`
+### `GET /deliveries?search=&status=&warehouseId=&page=&pageSize=`
+Res 200: `{ data, total, page, pageSize }` (§0 envelope). Item:
+`{ id, reference, fromLocationId, fromLocationName, toContactId, toContactName, toContactEmail,
+scheduleDate, status, operationType, warehouseId, responsibleUserId }`
+
+> **Phase 3 amendment (`PHASE3_DECISIONS.md` §8):** optional `warehouseId` scope filter; list
+> items add `toContactEmail`/`warehouseId` (additive). `search` matches reference or customer
+> name (R6.5).
 
 ### `POST /deliveries`
 Req: `{ fromLocationId, toContactId, scheduleDate, operationType, responsibleUserId?,
@@ -143,8 +183,11 @@ lines: [{ productId, quantity }] }`
 Res 201: full delivery (status auto-computed: `DRAFT`, or `WAITING` if any line exceeds
 `freeToUse` at `fromLocationId` — R6.12).
 
-### `GET /deliveries/:id` — full detail incl. lines, each line flagged `{ ..., outOfStock: bool }`
-for red-row rendering (R6.11).
+### `GET /deliveries/:id` — full detail; lines
+`[{ id, productId, productName, sku, uom, quantity, outOfStock }]` for red-row rendering (R6.11).
+`outOfStock` compares the line against availability **excluding the document's own reservation**
+(`PHASE3_DECISIONS.md` §2). Detail adds `responsibleUserName`, `validatedAt`, `createdAt`,
+`note` (additive).
 
 ### `PATCH /deliveries/:id` — edit while not Done/Canceled; re-evaluates Waiting status.
 
@@ -159,40 +202,71 @@ current state (see `07_STATUS_WORKFLOWS.md` for exact transition table); on Done
 ---
 
 ## §8. Internal Transfers (Owner: Person 3) — Phase 4
-### `GET /transfers?search=&status=`
-Res 200 item: `{ id, reference, fromLocationId, toLocationId, scheduleDate, status }`
+### `GET /transfers?search=&status=&warehouseId=&page=&pageSize=`
+Res 200: `{ data, total, page, pageSize }` (§0 envelope). Item:
+`{ id, reference, fromLocationId, fromLocationName, toLocationId, toLocationName, scheduleDate,
+status, warehouseId, responsibleUserId }`
+
+> **Phase 4 amendment (`PHASE4_DECISIONS.md` §6):** optional `warehouseId` scope filter and
+> pagination; item adds location names/`warehouseId` (additive). `search` matches the reference
+> or either location name.
 
 ### `POST /transfers`
-Req: `{ fromLocationId, toLocationId, scheduleDate, responsibleUserId?,
-lines: [{ productId, quantity }] }`
+Req: `{ fromLocationId, toLocationId, scheduleDate, responsibleUserId?, lines: [{ productId,
+quantity }] }` → Res 201 full transfer, status `DRAFT` (no reservation — a Draft is a plan).
+Errors: `VALIDATION_ERROR` when the locations are equal/unknown or a line is invalid (BR27).
 
-### `GET /transfers/:id`, `PATCH /transfers/:id`
+### `GET /transfers/:id` — full detail (`lines` with `sku`/`uom`, `responsibleUserName`,
+`validatedAt`, `createdAt`, `note`, additive per `PHASE4_DECISIONS.md` §6).
 
-### `POST /transfers/:id/confirm` — Draft → Ready
+### `PATCH /transfers/:id` — editable while `DRAFT`/`READY`; a READY transfer always keeps a
+full reservation: the old one is released and the new lines reserved in one transaction, or
+`CONFLICT` when they do not fit.
 
-### `POST /transfers/:id/validate` — Ready → Done; decrements stock at `fromLocationId` and
-increments stock at `toLocationId` in the same transaction (R7.2); writes two `stock_ledger`
-rows per line (one OUT, one IN) so Move History can display both legs (R9.4/R9.5).
+### `POST /transfers/:id/confirm` — Draft → Ready; **reserves** the line quantities at
+`fromLocationId`; `CONFLICT` when any line exceeds `free_to_use` (07 transfer-1, no Waiting
+state).
 
-### `POST /transfers/:id/cancel`
+### `POST /transfers/:id/validate` — Ready → Done; releases the reservation, then decrements
+stock at `fromLocationId` and increments stock at `toLocationId` in the same transaction (R7.2);
+writes two `stock_ledger` rows per line (one OUT, one IN) so Move History can display both legs
+(R9.4/R9.5). Total company stock is unchanged (BR14).
+
+### `POST /transfers/:id/cancel` — Draft/Ready only; releases any reservation; no ledger rows
+(BR25/BR26). No print endpoint (no mockup for transfer documents).
 
 ---
 
 ## §9. Stock Adjustments (Owner: Person 3) — Phase 4
-### `GET /adjustments?search=&status=`
+### `GET /adjustments?search=&status=&warehouseId=&productId=&locationId=&page=&pageSize=`
+Res 200: `{ data, total, page, pageSize }` (§0 envelope). Item:
+`{ id, reference, status: "DONE", scheduleDate, movedAt, productId, productName, sku, locationId,
+locationName, recordedQuantity, countedQuantity, delta, note }`
+(`productName`/`sku`/`locationName`/dates/`note` additive per `PHASE4_DECISIONS.md` §6.)
+
 ### `POST /adjustments`
 Req: `{ productId, locationId, countedQuantity, note? }`
-Res 201: `{ id, reference, productId, locationId, recordedQuantity, countedQuantity, delta,
-status: "DONE" }` — applied immediately per R8.3 (no separate validate step, see R8 open
+Res 201: same item shape — applied immediately per R8.3 (no separate validate step, see R8 open
 decision); writes one `stock_ledger` row with `direction` derived from the sign of `delta`.
+`countedQuantity >= 0`; fails with `CONFLICT` when it is below the location's `reserved_qty`
+(open deliveries, `PHASE3_DECISIONS.md` §7). A zero delta is recorded as a `DONE` document with
+**no line and no ledger row** (BR15) — see `PHASE4_DECISIONS.md` §2.
 
 ### `GET /adjustments/:id`
 
 ---
 
 ## §10. Move History (Owner: Person 4, read-only over `stock_ledger`) — Phase 4
-### `GET /move-history?search=&status=&type=&page=&pageSize=`
-Res 200 item (one row per product line, R9.3):
+### `GET /move-history?search=&status=&type=&direction=&productId=&warehouseId=&locationId=&dateFrom=&dateTo=&page=&pageSize=`
+
+> **Phase 4 amendment (`PHASE4_DECISIONS.md` §3):** filters for document `type`, ledger
+> `direction` (IN/OUT), `productId`, `warehouseId`, `locationId` (either leg), inclusive
+> `dateFrom`/`dateTo` on the ledger date; `search` matches reference, product name/SKU or contact
+> name. Response is the §0 paginated envelope. Item adds `id`, `type`, `productId`, `sku`,
+> `movedAt` (additive). `from`/`to` are display labels per document type (missing receipt side =
+> vendor name, missing delivery side = customer name, adjustment side = "Inventory adjustment").
+
+Res 200 item (one row per ledger entry, R9.3):
 ```json
 {
   "reference": "WH/IN/0001",

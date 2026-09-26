@@ -35,8 +35,13 @@ DRAFT --(auto, if any line short on stock)--> WAITING --(stock becomes available
 - **CANCELED**: from Draft, Waiting, or Ready only (BR25).
 - **Re-evaluation:** every edit to a Delivery's lines or every relevant Receipt/Transfer/
   Adjustment validation that changes stock at `from_location_id` re-runs the Waiting check
-  (BR17) for open Deliveries referencing that location. (Implementation detail — flagged as a
-  background/synchronous recheck, exact mechanism left to Person 3 at Phase 3 kickoff.)
+  (BR17) for open Deliveries referencing that location. **Resolved in Phase 3
+  (`docs/reviews/PHASE3_DECISIONS.md` §1):** a synchronous FIFO recheck runs in the same
+  transaction as the stock-changing event; WAITING deliveries that now fit reserve their lines
+  and become READY. Open (`DRAFT`/`READY`) deliveries hold `reserved_qty` equal to their lines;
+  WAITING deliveries hold none; cancel releases. See also §3 of that document for the UI
+  mapping of the PDF "pick → pack → validate" process (Draft → Ready = "Pick & Pack",
+  Ready → Done = "Validate").
 
 ## Internal Transfer (derived — `transfer-1` open decision)
 ```

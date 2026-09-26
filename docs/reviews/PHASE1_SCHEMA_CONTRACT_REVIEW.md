@@ -45,5 +45,10 @@ interface draft (`backend/src/stock-engine/INTERFACE.md`).
 ## Sign-off
 
 - [x] Person 3 reviewed schema + contracts; no Phase 1 blockers.
-- [ ] Person 1 acknowledges items 1–3 (behavior already implemented as described).
-- [ ] Items 4–5 tracked for Phase 2/3 kickoff.
+- [x] Person 1 acknowledges items 1–3 (behavior implemented as described; OTP index shipped in
+      the Phase 1 migration).
+
+> **Phase 2 resolution (2026-09-26):** item 4 (`created_at` consistency) resolved by the Phase 2
+> migration — see `04_DATABASE_SCHEMA.md` and `PHASE2_DECISIONS.md` §8. Item 5 (`reserved_qty`
+> lifecycle) recorded: Phase 2 keeps reservations at 0 and the lifecycle decision is due at
+> Phase 3 kickoff — see `PHASE2_DECISIONS.md` §10 / stock-engine `INTERFACE.md`.

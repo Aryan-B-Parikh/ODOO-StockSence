@@ -54,6 +54,7 @@ stock_moves, stock_move_lines, stock_ledger
 |---|---|---|
 | id | UUID PK | |
 | name | varchar(255) | unique |
+| created_at | timestamptz | (schema preamble applies — Phase 2 migration) |
 
 ### `products`
 | Column | Type | Notes |
@@ -85,8 +86,9 @@ Current on-hand quantity per product per location. One row per (product, locatio
 | id | UUID PK | |
 | product_id | UUID FK → products.id | |
 | location_id | UUID FK → locations.id | |
-| on_hand_qty | numeric(14,3) | default 0 |
-| reserved_qty | numeric(14,3) | default 0 (allocated to open Delivery/Transfer lines) |
+| on_hand_qty | numeric(14,3) | default 0; `CHECK (on_hand_qty >= 0)` (Phase 3 migration) |
+| reserved_qty | numeric(14,3) | default 0 (allocated to open Delivery lines in Phase 3 — `docs/reviews/PHASE3_DECISIONS.md` §1); `CHECK (0 <= reserved_qty <= on_hand_qty)` |
+| created_at | timestamptz | (schema preamble applies — Phase 2 migration) |
 | updated_at | timestamptz | |
 | — | UNIQUE (product_id, location_id) | |
 
@@ -100,6 +102,7 @@ Backs the reference-number generator (R5.7): `<WarehouseShortCode>/<OP>/<padded 
 | warehouse_id | UUID FK → warehouses.id | |
 | operation_type | varchar(10) | `IN` \| `OUT` \| `INT` \| `ADJ` |
 | last_number | integer | default 0, incremented atomically per new document |
+| created_at | timestamptz | (schema preamble applies — Phase 2 migration) |
 | — | UNIQUE (warehouse_id, operation_type) | |
 
 ### `stock_moves`
@@ -119,6 +122,9 @@ table keeps status/reference logic identical across all four operation types, pe
 | schedule_date | date | |
 | responsible_user_id | UUID FK → users.id | defaults to creator (R5.8) |
 | status | varchar(15) | `DRAFT` \| `WAITING` \| `READY` \| `DONE` \| `CANCELED` (see `07_STATUS_WORKFLOWS.md`) |
+| note | text | nullable; **Phase 2 addition** — optional reason for adjustments (`PATCH /stock`, Phase 4 Adjustment form) |
+| recorded_quantity | numeric(14,3) | nullable; **Phase 4 addition** — on-hand before an ADJUSTMENT (set for every adjustment path) |
+| counted_quantity | numeric(14,3) | nullable; **Phase 4 addition** — physical count entered for an ADJUSTMENT (§9 list/detail) |
 | validated_at | timestamptz | nullable, set when status → DONE |
 | created_at / updated_at | timestamptz | |
 
@@ -128,7 +134,7 @@ table keeps status/reference logic identical across all four operation types, pe
 | id | UUID PK | |
 | stock_move_id | UUID FK → stock_moves.id | |
 | product_id | UUID FK → products.id | |
-| quantity | numeric(14,3) | must be > 0 |
+| quantity | numeric(14,3) | must be > 0 — `CHECK (quantity > 0)` (Phase 3 migration) |
 | created_at | timestamptz | |
 
 ### `stock_ledger`
