@@ -1,0 +1,41 @@
+// StockSense — Prisma schema.
+// Source of truth: docs/04_DATABASE_SCHEMA.md. Migrations are added phase by phase
+// (Phase 1 ships users + otp_requests only).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §users
+model User {
+  id           String       @id @default(uuid()) @db.Uuid
+  loginId      String       @unique @map("login_id") @db.VarChar(12)
+  email        String       @unique @db.VarChar(255)
+  passwordHash String       @map("password_hash") @db.VarChar(255)
+  displayName  String?      @map("display_name") @db.VarChar(255)
+  role         String       @default("INVENTORY_MANAGER") @db.VarChar(30)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  otpRequests  OtpRequest[]
+
+  @@map("users")
+}
+
+/// docs/04_DATABASE_SCHEMA.md §otp_requests — supports BR6 (expiry + single use)
+model OtpRequest {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  otpCode   String   @map("otp_code") @db.VarChar(6)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  consumed  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("otp_requests")
+}

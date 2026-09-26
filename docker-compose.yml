@@ -1,0 +1,61 @@
+# StockSense local stack — Person 4 deliverable (03_ARCHITECTURE.md §6).
+# Usage: cp .env.example .env && docker compose up --build
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: stocksense-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-stocksense}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stocksense}
+      POSTGRES_DB: ${POSTGRES_DB:-stocksense}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - stocksense-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-stocksense} -d ${POSTGRES_DB:-stocksense}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: stocksense-backend
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stocksense}:${POSTGRES_PASSWORD:-stocksense}@db:5432/${POSTGRES_DB:-stocksense}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+    ports:
+      - '${BACKEND_PORT:-4000}:4000'
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/api/v1/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: stocksense-frontend
+    environment:
+      # Integration checkpoint: MSW off, talk to the real backend through the Vite proxy.
+      VITE_USE_MSW: 'false'
+      VITE_PROXY_TARGET: http://backend:4000
+    ports:
+      - '${FRONTEND_PORT:-5173}:5173'
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  stocksense-pgdata:

@@ -1,0 +1,21 @@
+{
+  "name": "stocksense",
+  "version": "0.1.0",
+  "private": true,
+  "description": "StockSense — Inventory Management System (hackathon MVP)",
+  "workspaces": [
+    "shared",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace @stocksense/backend",
+    "dev:frontend": "npm run dev --workspace @stocksense/frontend",
+    "typecheck": "npm run typecheck --workspace @stocksense/shared && npm run typecheck --workspace @stocksense/backend && npm run typecheck --workspace @stocksense/frontend",
+    "test": "npm run test --workspace @stocksense/shared && npm run test --workspace @stocksense/backend && npm run test --workspace @stocksense/frontend",
+    "build": "npm run build --workspace @stocksense/frontend"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
