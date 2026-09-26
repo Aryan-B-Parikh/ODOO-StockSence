@@ -122,49 +122,9 @@
 }
 
 /* ---------------------------------------------------------------------------
- * StockSense custom utilities
+ * StockSense custom utilities — warehouse inventory theme
+ * (emerald/teal primary · warm zinc/stone neutrals · severity accents)
  * ------------------------------------------------------------------------- */
-
-/* Ticker tape marquee */
-@keyframes marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-.animate-marquee {
-  animation: marquee 75s linear infinite;
-  will-change: transform;
-}
-.marquee-wrap:hover .animate-marquee {
-  animation-play-state: paused;
-}
-
-/* Live price flash */
-@keyframes flash-up {
-  0% {
-    background-color: color-mix(in oklab, oklch(0.696 0.15 162.5) 26%, transparent);
-  }
-  100% {
-    background-color: transparent;
-  }
-}
-@keyframes flash-down {
-  0% {
-    background-color: color-mix(in oklab, oklch(0.637 0.194 25.7) 26%, transparent);
-  }
-  100% {
-    background-color: transparent;
-  }
-}
-.flash-up {
-  animation: flash-up 800ms ease-out;
-}
-.flash-down {
-  animation: flash-down 800ms ease-out;
-}
 
 /* Pulsing live dot */
 @keyframes pulse-dot {

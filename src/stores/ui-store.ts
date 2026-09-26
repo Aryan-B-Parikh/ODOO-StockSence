@@ -1,51 +1,77 @@
 'use client'
 
-/**
- * StockSense — UI navigation store (Zustand).
- * The stock detail dialog & trade dialog are mounted once at the root and
- * controlled through this store, so any view can open them.
- */
-
 import { create } from 'zustand'
 
-export type ViewKey = 'dashboard' | 'markets' | 'news' | 'portfolio' | 'watchlist' | 'analyst'
+export const VIEW_KEYS = [
+  'dashboard',
+  'products',
+  'receipts',
+  'deliveries',
+  'transfers',
+  'adjustments',
+  'counts',
+  'history',
+  'alerts',
+  'reorder',
+] as const
+
+export type ViewKey = (typeof VIEW_KEYS)[number]
+
+export function isViewKey(v: string): v is ViewKey {
+  return (VIEW_KEYS as readonly string[]).includes(v)
+}
 
 interface UIState {
-  activeView: ViewKey
-  selectedSymbol: string | null
-  detailOpen: boolean
-  tradeSymbol: string | null
-  tradeOpen: boolean
-  searchOpen: boolean
-  setView: (v: ViewKey) => void
-  openStock: (symbol: string) => void
-  closeStock: () => void
-  openTrade: (symbol: string | null) => void
-  closeTrade: () => void
-  setSearchOpen: (v: boolean) => void
+  view: ViewKey
+  setView: (view: ViewKey) => void
+  /** Product detail dialog target (consumed by the Products view). */
+  productDetailId: number | null
+  /** Opens a product detail and navigates to the Products view. */
+  openProduct: (id: number) => void
+  closeProduct: () => void
+  /** Optional meta side-panel (forms reference data) — used by Task 2 views. */
+  metaPanelOpen: boolean
+  setMetaPanelOpen: (open: boolean) => void
+}
+
+function syncHash(view: ViewKey) {
+  if (typeof window === 'undefined') return
+  const target = `#view=${view}`
+  if (window.location.hash !== target) {
+    window.history.replaceState(null, '', target)
+  }
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  activeView: 'dashboard',
-  selectedSymbol: null,
-  detailOpen: false,
-  tradeSymbol: null,
-  tradeOpen: false,
-  searchOpen: false,
-
-  setView: (v) => set({ activeView: v }),
-  openStock: (symbol) => set({ selectedSymbol: symbol, detailOpen: true }),
-  closeStock: () => set({ detailOpen: false }),
-  openTrade: (symbol) => set({ tradeSymbol: symbol, tradeOpen: true }),
-  closeTrade: () => set({ tradeOpen: false }),
-  setSearchOpen: (v) => set({ searchOpen: v }),
+  view: 'dashboard',
+  setView: (view) => {
+    set({ view })
+    syncHash(view)
+  },
+  productDetailId: null,
+  openProduct: (id) => {
+    set({ productDetailId: id, view: 'products' })
+    syncHash('products')
+  },
+  closeProduct: () => set({ productDetailId: null }),
+  metaPanelOpen: false,
+  setMetaPanelOpen: (open) => set({ metaPanelOpen: open }),
 }))
 
-export const VIEW_LABELS: Record<ViewKey, string> = {
-  dashboard: 'Dashboard',
-  markets: 'Markets',
-  news: 'News',
-  portfolio: 'Portfolio',
-  watchlist: 'Watchlist',
-  analyst: 'AI Analyst',
+/**
+ * Deep-link support: parse `#view=xxx` on mount and follow hashchange events
+ * (e.g. browser back/forward). Returns a cleanup fn — call from an effect.
+ */
+export function initUiHashSync(): () => void {
+  if (typeof window === 'undefined') return () => {}
+  const apply = () => {
+    const match = window.location.hash.match(/^#view=([a-z-]+)/)
+    const v = match?.[1]
+    if (v && isViewKey(v) && useUIStore.getState().view !== v) {
+      useUIStore.setState({ view: v })
+    }
+  }
+  apply()
+  window.addEventListener('hashchange', apply)
+  return () => window.removeEventListener('hashchange', apply)
 }

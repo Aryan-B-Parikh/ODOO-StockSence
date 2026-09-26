@@ -1,135 +1,393 @@
 /**
- * StockSense — Shared API types used by both API routes and frontend.
+ * StockSense — shared DTOs (API ⇄ frontend contract).
+ * Backend routes map Prisma rows + engine computations into these shapes.
  */
 
-import type { Quote, Bar, IndexQuote, SectorPerf, MarketBreadth, MarketSentiment } from './market/engine'
+// ---------- Auth ----------
 
-export type { Quote, Bar, IndexQuote, SectorPerf, MarketBreadth, MarketSentiment }
-
-export interface StockDetail {
-  quote: Quote
-  profile: {
-    symbol: string
-    name: string
-    sector: string
-    exchange: string
-    description: string
-    ceo: string
-    hq: string
-    employees: number
-    website: string
-    founded: string
-  }
-  peers: Quote[]
-}
-
-export interface MarketOverview {
-  serverTime: string
-  indices: IndexQuote[]
-  breadth: MarketBreadth
-  sentiment: MarketSentiment
-  movers: {
-    gainers: Quote[]
-    losers: Quote[]
-    mostActive: Quote[]
-  }
-  sectors: SectorPerf[]
-}
-
-export interface NewsDTO {
+export interface SessionUser {
   id: number
-  symbol: string | null
-  symbolName: string | null
-  headline: string
-  summary: string
-  source: string
-  sentiment: number
-  sentimentLabel: string
-  impact: string
-  publishedAt: string
-  aiSummary: string | null
-}
-
-export interface WatchItemDTO {
-  symbol: string
-  note: string | null
-  alertAbove: number | null
-  alertBelow: number | null
-  quote: Quote
-}
-
-export interface HoldingDTO {
-  symbol: string
   name: string
-  quantity: number
-  avgCost: number
-  costBasis: number
-  marketValue: number
-  dayChange: number
-  dayChangePct: number
-  pnl: number
-  pnlPct: number
-  allocation: number // 0-100
-  quote: Quote
+  email: string
+  role: string
+  permissions: string[]
 }
 
-export interface TransactionDTO {
+// ---------- Products ----------
+
+export interface StockByLocationDTO {
+  locationId: number
+  fullPath: string
+  warehouseName: string
+  onHand: number
+  reserved: number
+  available: number
+  incoming: number
+  inTransit: number
+  damaged: number
+}
+
+export interface SupplierLinkDTO {
+  supplierId: number
+  name: string
+  preferred: boolean
+  leadTimeDays: number
+  costPrice: number
+  minOrderQty: number
+  orderMultiple: number
+  reliability: number
+  damageRate: number
+}
+
+export interface ProductDTO {
   id: number
-  symbol: string
-  side: 'BUY' | 'SELL'
-  quantity: number
-  price: number
-  fee: number
+  sku: string
+  name: string
+  category: string
+  unit: string
+  unitCost: number
+  reorderPoint: number
+  dailyUsage: number
+  safetyStock: number
+  valueClass: string // HIGH | MEDIUM | LOW
+  notes: string | null
+  active: boolean
+  // aggregated across locations (available = onHand − reserved, never oversold)
+  onHand: number
+  reserved: number
+  available: number
+  incoming: number
+  inTransit: number
+  damaged: number
+  stockValue: number // onHand × unitCost
+  belowReorder: boolean // projected available (onHand + incoming − reserved) < reorderPoint
+  stockoutRisk: boolean // projected available ≤ safetyStock
+  suppliers: SupplierLinkDTO[]
+  stockByLocation: StockByLocationDTO[]
+}
+
+export interface ProductListDTO {
+  products: ProductDTO[]
+  categories: string[]
+  summary: {
+    totalSkus: number
+    totalStockValue: number
+    belowReorder: number
+    stockoutRisk: number
+  }
+}
+
+// ---------- Receipts ----------
+
+export interface ReceiptLineDTO {
+  id: number
+  productId: number
+  sku: string
+  productName: string
+  unit: string
+  locationId: number
+  locationPath: string
+  expectedQty: number
+  receivedQty: number | null
+  damagedQty?: number | null
+}
+
+export interface ReceiptDTO {
+  id: number
+  code: string
+  status: string // EXPECTED | RECEIVED | CANCELLED
+  supplierId: number | null
+  supplierName: string | null
+  warehouseName: string
+  expectedAt: string
+  receivedAt: string | null
   note: string | null
-  executedAt: string
+  createdAt: string
+  createdBy: number | null
+  lines: ReceiptLineDTO[]
+  daysLate: number // >0 only for EXPECTED past due
 }
 
-export interface PortfolioSummary {
-  cash: number
-  totalValue: number // cash + positions market value
-  positionsValue: number
-  totalCost: number
-  dayChange: number
-  dayChangePct: number
-  totalPnl: number // unrealized + realized vs seed capital
-  totalPnlPct: number
-  seedCapital: number
-  positionsCount: number
-  best: { symbol: string; pnlPct: number } | null
-  worst: { symbol: string; pnlPct: number } | null
+export interface ReceiptListDTO {
+  receipts: ReceiptDTO[]
 }
 
-export interface PortfolioDTO {
-  summary: PortfolioSummary
-  holdings: HoldingDTO[]
-  transactions: TransactionDTO[]
-}
+// ---------- Delivery orders ----------
 
-export interface AnalysisReportDTO {
+export interface DeliveryLineDTO {
   id: number
-  symbol: string
-  rating: string
-  score: number
-  targetLow: number | null
-  targetHigh: number | null
-  content: string
+  productId: number
+  sku: string
+  productName: string
+  unit: string
+  locationId: number
+  locationPath: string
+  qty: number
+  pickedQty: number | null
+  availableAtLocation: number
+}
+
+export interface DeliveryDTO {
+  id: number
+  code: string
+  customer: string
+  status: string // RESERVED | PICKED | PACKED | DELIVERED | CANCELLED
+  note: string | null
+  createdAt: string
+  pickedAt: string | null
+  packedAt: string | null
+  deliveredAt: string | null
+  createdBy: number | null
+  lines: DeliveryLineDTO[]
+}
+
+export interface DeliveryListDTO {
+  deliveries: DeliveryDTO[]
+}
+
+// ---------- Transfers ----------
+
+export interface TransferLineDTO {
+  id: number
+  productId: number
+  sku: string
+  productName: string
+  unit: string
+  qty: number
+  availableAtSource: number
+}
+
+export interface TransferDTO {
+  id: number
+  code: string
+  status: string // IN_TRANSIT | RECEIVED | CANCELLED
+  fromLocationId: number
+  fromLocationPath: string
+  toLocationId: number
+  toLocationPath: string
+  note: string | null
+  shippedAt: string
+  receivedAt: string | null
+  createdBy: number | null
+  lines: TransferLineDTO[]
+}
+
+export interface TransferListDTO {
+  transfers: TransferDTO[]
+}
+
+// ---------- Adjustments ----------
+
+export interface AdjustmentLineDTO {
+  id: number
+  productId: number
+  sku: string
+  productName: string
+  unit: string
+  locationId: number
+  locationPath: string
+  systemQty: number
+  countedQty: number
+  delta: number
+}
+
+export interface AdjustmentDTO {
+  id: number
+  code: string
+  status: string // PENDING_APPROVAL | POSTED | REJECTED
+  severity: string // LOW | MEDIUM | HIGH
+  reason: string
+  note: string | null
+  createdByName?: string | null
+  approvedByName?: string | null
+  createdAt: string
+  postedAt: string | null
+  lines: AdjustmentLineDTO[]
+}
+
+export interface AdjustmentListDTO {
+  adjustments: AdjustmentDTO[]
+}
+
+// ---------- Ledger (Move History) ----------
+
+export interface LedgerEntryDTO {
+  id: number
+  code: string // LEDGER-2026-000184
+  docType: string // RECEIPT | DELIVERY | TRANSFER | ADJUSTMENT | COUNT | OPENING
+  docCode: string // RCPT-1042 …
+  productId: number
+  sku: string
+  productName: string
+  unit: string
+  locationId: number
+  locationPath: string
+  field: string // ON_HAND | RESERVED | INCOMING | IN_TRANSIT | DAMAGED
+  prevQty: number
+  newQty: number
+  diff: number
+  reason: string | null
+  performedByName?: string | null
   createdAt: string
 }
 
-export interface ChatMessageDTO {
+export interface LedgerListDTO {
+  entries: LedgerEntryDTO[]
+  total: number
+  docTypes: string[]
+}
+
+// ---------- Cycle counts ----------
+
+export interface CountLineDTO {
   id: number
-  role: 'user' | 'assistant'
-  content: string
+  productId: number
+  sku: string
+  productName: string
+  unit: string
+  systemQty: number
+  countedQty: number | null
+  variance: number | null
+}
+
+export interface CycleCountDTO {
+  id: number
+  code: string
+  status: string // OPEN | COMPLETED | CANCELLED
+  scope: string // LOCATION | PRODUCT
+  locationId: number | null
+  locationPath: string | null
+  productId: number | null
+  productSku: string | null
+  productName: string | null
+  dueDate: string
+  cadence: string // WEEKLY | MONTHLY | QUARTERLY
+  note: string | null
+  completedAt: string | null
+  lines: CountLineDTO[]
+  daysOverdue: number
+  totalVariance: number | null
+  adjustmentCodes: string[]
+}
+
+export interface CountListDTO {
+  counts: CycleCountDTO[]
+}
+
+// ---------- Reorder (Phase 3) ----------
+
+export interface ReorderSuggestionDTO {
+  id: number
+  productId: number
+  sku: string
+  productName: string
+  unit: string
+  category: string
+  onHand: number
+  reserved: number
+  incoming: number
+  projectedAvailable: number
+  reorderPoint: number
+  dailyUsage: number
+  safetyStock: number
+  suggestedQty: number
+  preferredName: string
+  preferredLeadDays: number
+  minOrderQty: number
+  orderMultiple: number
+  reason: string
+  status: string // PENDING | ACCEPTED | DISMISSED
+  decidedAt: string | null
+  receiptCode: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ReorderListDTO {
+  suggestions: ReorderSuggestionDTO[]
+}
+
+// ---------- Attention / Exceptions (Phase 4) ----------
+
+export interface AttentionItemDTO {
+  key: string
+  kind: string // BELOW_REORDER | STOCKOUT | PENDING_ADJUSTMENT | REVIEW_FLAG | DELAYED_RECEIPT | REORDER_SUGGESTION
+  severity: 'red' | 'orange' | 'green'
+  icon: string
+  title: string
+  detail: string
+  href: string // app view to open
+}
+
+export interface AttentionDTO {
+  summary: {
+    belowReorder: number
+    stockouts: number
+    pendingApprovalAdjustments: number
+    openFlags: number
+    delayedReceipts: number
+    pendingSuggestions: number
+    inTransitTransfers: number
+    openCounts: number
+  }
+  items: AttentionItemDTO[]
+  flags: ExceptionFlagDTO[]
+}
+
+export interface ExceptionFlagDTO {
+  id: number
+  type: string
+  severity: string
+  message: string
+  refCode: string | null
+  status: string
   createdAt: string
 }
+
+// ---------- Dashboard ----------
+
+export interface DashboardDTO {
+  kpis: {
+    totalStockValue: number
+    availableValue: number
+    reservedValue: number
+    incomingValue: number
+    inTransitValue: number
+    damagedValue: number
+    skuCount: number
+    lowStockCount: number
+    stockoutCount: number
+    openDeliveries: number
+    inTransitTransfers: number
+    pendingAdjustments: number
+    expectedReceipts: number
+  }
+  valueByCategory: { category: string; value: number }[]
+  racks: { rackCode: string; zoneName: string; locationCount: number; onHandValue: number; fillPct: number }[]
+  flows: { date: string; received: number; delivered: number }[]
+  activity: LedgerEntryDTO[]
+  attention: AttentionDTO
+}
+
+// ---------- Meta (for forms) ----------
+
+export interface MetaDTO {
+  warehouses: { id: number; code: string; name: string }[]
+  locations: { id: number; fullPath: string; warehouseName: string; zoneName: string; rackCode: string; code: string }[]
+  suppliers: { id: number; name: string; leadTimeDays: number }[]
+  products: { id: number; sku: string; name: string; unit: string; category: string; onHand: number; reserved: number; available: number }[]
+  categories: string[]
+}
+
+// ---------- Search ----------
 
 export interface SearchResultDTO {
-  symbol: string
+  id: number
+  sku: string
   name: string
-  sector: string
-  price: number
-  changePct: number
+  category: string
+  unit: string
+  onHand: number
+  available: number
+  belowReorder: boolean
 }
-
-export const CASH_SEED = 100000
-export const ANALYSIS_TTL_MS = 45 * 60 * 1000

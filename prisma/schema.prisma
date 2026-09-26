@@ -1,3 +1,10 @@
+// StockSense — Warehouse Inventory Management System
+// Schema designed per Implementation Plan Phase 0:
+//   • location hierarchy warehouse → zone → rack → shelf/bin
+//   • split quantities per SKU/location: onHand / reserved / incoming / inTransit / damaged
+//   • immutable event ledger referencing source documents
+//   • granular permission list assigned to roles (extensible beyond MVP roles)
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,80 +14,359 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Stock {
-  id          Int     @id @default(autoincrement())
-  symbol      String  @unique
-  name        String
-  sector      String
-  exchange    String
-  description String
-  ceo         String?
-  hq          String?
-  employees   Int?
-  website     String?
-  founded     String?
+// ---------------------------------------------------------------------------
+// Auth & permissions
+// ---------------------------------------------------------------------------
+
+model User {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         String // WAREHOUSE_STAFF | INVENTORY_MANAGER | (extensible: ADMINISTRATOR, …)
+  permissions  String // JSON array of granular action codes (see src/lib/permissions.ts)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
 }
 
-model NewsItem {
-  id            Int      @id @default(autoincrement())
-  dateKey       String
-  slot          Int
-  symbol        String?
-  headline      String
-  summary       String
-  source        String
-  sentiment     Float
-  sentimentLabel String
-  impact        String
-  aiSummary     String?
-  publishedAt   DateTime
-
-  @@unique([dateKey, slot])
-  @@index([symbol, publishedAt])
-}
-
-model WatchItem {
-  id         Int      @id @default(autoincrement())
-  symbol     String   @unique
-  note       String?
-  alertAbove Float?
-  alertBelow Float?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-}
-
-model Transaction {
-  id         Int      @id @default(autoincrement())
-  symbol     String
-  side       String
-  quantity   Float
-  price      Float
-  fee        Float    @default(0)
-  note       String?
-  executedAt DateTime @default(now())
-
-  @@index([symbol, executedAt])
-}
-
-model AnalysisReport {
-  id         Int      @id @default(autoincrement())
-  symbol     String
-  rating     String
-  score      Float
-  targetLow  Float?
-  targetHigh Float?
-  content    String
-  createdAt  DateTime @default(now())
-
-  @@index([symbol, createdAt])
-}
-
-model ChatMessage {
+model Session {
   id        Int      @id @default(autoincrement())
-  sessionId String
-  role      String
-  content   String
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
   createdAt DateTime @default(now())
+}
 
-  @@index([sessionId, createdAt])
+// ---------------------------------------------------------------------------
+// Location hierarchy: warehouse → zone → rack → shelf/bin
+// ---------------------------------------------------------------------------
+
+model Warehouse {
+  id       Int      @id @default(autoincrement())
+  code     String   @unique
+  name     String
+  address  String
+  zones    Zone[]
+  receipts Receipt[]
+}
+
+model Zone {
+  id          Int       @id @default(autoincrement())
+  warehouseId Int
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  code        String
+  name        String
+  racks       Rack[]
+
+  @@unique([warehouseId, code])
+}
+
+model Rack {
+  id      Int   @id @default(autoincrement())
+  zoneId  Int
+  zone    Zone  @relation(fields: [zoneId], references: [id])
+  code    String
+  name    String
+  shelves Location[]
+
+  @@unique([zoneId, code])
+}
+
+model Location {
+  id              Int              @id @default(autoincrement())
+  rackId          Int
+  rack            Rack             @relation(fields: [rackId], references: [id])
+  code            String // shelf / bin code, e.g. S1, BIN-04
+  fullPath        String // denormalized "WH1 · Zone A · Rack A1 · Shelf S2"
+  stocks          StockLevel[]
+  receiptLines    ReceiptLine[]
+  deliveryLines   DeliveryLine[]
+  adjustmentLines AdjustmentLine[]
+  ledger          LedgerEntry[]
+  transfersFrom   Transfer[]       @relation("FromLoc")
+  transfersTo     Transfer[]       @relation("ToLoc")
+  counts          CycleCount[]
+}
+
+// ---------------------------------------------------------------------------
+// Products & suppliers
+// ---------------------------------------------------------------------------
+
+model Product {
+  id              Int              @id @default(autoincrement())
+  sku             String           @unique
+  name            String
+  category        String
+  unit            String // kg, pcs, box, roll, L, m
+  unitCost        Float
+  reorderPoint    Float
+  dailyUsage      Float // avg daily usage — powers reorder-point explanations
+  safetyStock     Float
+  valueClass      String // HIGH | MEDIUM | LOW → cycle-count cadence
+  notes           String?
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  stocks          StockLevel[]
+  suppliers       ProductSupplier[]
+  receiptLines    ReceiptLine[]
+  deliveryLines   DeliveryLine[]
+  transferLines   TransferLine[]
+  adjustmentLines AdjustmentLine[]
+  ledger          LedgerEntry[]
+  countLines      CycleCountLine[]
+  suggestions     ReorderSuggestion[]
+  counts          CycleCount[]
+}
+
+model Supplier {
+  id           Int                @id @default(autoincrement())
+  name         String             @unique
+  contact      String?
+  leadTimeDays Int                @default(7)
+  reliability  Float              @default(0.95) // on-time delivery rate 0-1
+  damageRate   Float              @default(0.01) // fraction of goods damaged
+  notes        String?
+  products     ProductSupplier[]
+  receipts     Receipt[]
+}
+
+model ProductSupplier {
+  id            Int      @id @default(autoincrement())
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id])
+  supplierId    Int
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  preferred     Boolean  @default(false)
+  costPrice     Float
+  minOrderQty   Float    @default(0)
+  orderMultiple Float    @default(1)
+
+  @@unique([productId, supplierId])
+}
+
+// ---------------------------------------------------------------------------
+// Stock quantities per SKU + location (split quantities, Phase 0)
+// ---------------------------------------------------------------------------
+
+model StockLevel {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  locationId Int
+  location   Location @relation(fields: [locationId], references: [id])
+  onHand     Float    @default(0)
+  reserved   Float    @default(0)
+  incoming   Float    @default(0) // expected units on open receipts targeting this location
+  inTransit  Float    @default(0) // units heading TO this location on open transfers
+  damaged    Float    @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([productId, locationId])
+}
+
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+
+model Receipt {
+  id          Int           @id @default(autoincrement())
+  code        String        @unique // RCPT-1042
+  supplierId  Int?
+  supplier    Supplier?     @relation(fields: [supplierId], references: [id])
+  warehouseId Int
+  warehouse   Warehouse     @relation(fields: [warehouseId], references: [id])
+  status      String // EXPECTED | RECEIVED | CANCELLED
+  expectedAt  DateTime
+  receivedAt  DateTime?
+  note        String?
+  createdBy   Int?
+  createdAt   DateTime      @default(now())
+  lines       ReceiptLine[]
+}
+
+model ReceiptLine {
+  id          Int      @id @default(autoincrement())
+  receiptId   Int
+  receipt     Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id])
+  locationId  Int
+  location    Location @relation(fields: [locationId], references: [id])
+  expectedQty Float
+  receivedQty Float?
+}
+
+model DeliveryOrder {
+  id          Int            @id @default(autoincrement())
+  code        String         @unique // DEL-2081
+  customer    String
+  status      String // RESERVED | PICKED | PACKED | DELIVERED | CANCELLED
+  note        String?
+  createdBy   Int?
+  createdAt   DateTime       @default(now())
+  pickedAt    DateTime?
+  packedAt    DateTime?
+  deliveredAt DateTime?
+  lines       DeliveryLine[]
+}
+
+model DeliveryLine {
+  id         Int            @id @default(autoincrement())
+  orderId    Int
+  order      DeliveryOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product        @relation(fields: [productId], references: [id])
+  locationId Int
+  location   Location       @relation(fields: [locationId], references: [id])
+  qty        Float // ordered == reserved until packed
+  pickedQty  Float?
+}
+
+model Transfer {
+  id             Int        @id @default(autoincrement())
+  code           String     @unique // TRF-552
+  status         String // IN_TRANSIT | RECEIVED | CANCELLED
+  fromLocationId Int
+  fromLocation   Location   @relation("FromLoc", fields: [fromLocationId], references: [id])
+  toLocationId   Int
+  toLocation     Location   @relation("ToLoc", fields: [toLocationId], references: [id])
+  note           String?
+  createdBy      Int?
+  shippedAt      DateTime   @default(now())
+  receivedAt     DateTime?
+  lines          TransferLine[]
+}
+
+model TransferLine {
+  id         Int      @id @default(autoincrement())
+  transferId Int
+  transfer   Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  qty        Float
+}
+
+model Adjustment {
+  id         Int              @id @default(autoincrement())
+  code       String           @unique // ADJ-901
+  status     String // PENDING_APPROVAL | POSTED | REJECTED
+  severity   String // LOW | MEDIUM | HIGH (CRITICAL attempts are blocked, never stored)
+  reason     String
+  note       String?
+  createdBy  Int?
+  approvedBy Int?
+  createdAt  DateTime         @default(now())
+  postedAt   DateTime?
+  lines      AdjustmentLine[]
+}
+
+model AdjustmentLine {
+  id           Int        @id @default(autoincrement())
+  adjustmentId Int
+  adjustment   Adjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  productId    Int
+  product     Product    @relation(fields: [productId], references: [id])
+  locationId   Int
+  location     Location   @relation(fields: [locationId], references: [id])
+  systemQty    Float
+  countedQty   Float
+  delta        Float
+}
+
+// ---------------------------------------------------------------------------
+// Immutable event ledger — every entry IDs the document it came from
+// ---------------------------------------------------------------------------
+
+model LedgerEntry {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // LEDGER-2026-000184
+  docType     String // RECEIPT | DELIVERY | TRANSFER | ADJUSTMENT | COUNT | OPENING
+  docCode     String // RCPT-1042 / DEL-2081 / TRF-552 / ADJ-901 / OPENING
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id])
+  locationId  Int
+  location    Location @relation(fields: [locationId], references: [id])
+  field       String // ON_HAND | RESERVED | INCOMING | IN_TRANSIT | DAMAGED
+  prevQty     Float
+  newQty      Float
+  diff        Float
+  reason      String?
+  performedBy Int?
+  approvedBy  Int?
+  createdAt   DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Cycle counts (Phase 4)
+// ---------------------------------------------------------------------------
+
+model CycleCount {
+  id          Int               @id @default(autoincrement())
+  code        String            @unique // CNT-0042
+  status      String // OPEN | COMPLETED | CANCELLED
+  scope       String // LOCATION | PRODUCT
+  locationId  Int?
+  location    Location?         @relation(fields: [locationId], references: [id])
+  productId   Int?
+  product     Product?          @relation(fields: [productId], references: [id])
+  dueDate     DateTime
+  cadence     String // WEEKLY | MONTHLY | QUARTERLY (from product value class)
+  note        String?
+  createdAt   DateTime    @default(now())
+  completedAt DateTime?
+  completedBy Int?
+  lines       CycleCountLine[]
+}
+
+model CycleCountLine {
+  id         Int        @id @default(autoincrement())
+  countId    Int
+  count      CycleCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product    @relation(fields: [productId], references: [id])
+  locationId Int? // per-line location for PRODUCT-scope counts (set at snapshot time)
+  systemQty  Float // snapshot of onHand at count creation
+  countedQty Float?
+  variance   Float?
+}
+
+// ---------------------------------------------------------------------------
+// Reorder suggestions (Phase 3) — one active row per product
+// ---------------------------------------------------------------------------
+
+model ReorderSuggestion {
+  id                 Int       @id @default(autoincrement())
+  productId          Int       @unique
+  product            Product   @relation(fields: [productId], references: [id])
+  suggestedQty       Float
+  preferredName      String
+  preferredLeadDays  Int
+  reason             String // plain-language explanation
+  status             String // PENDING | ACCEPTED | DISMISSED
+  decidedBy          Int?
+  decidedAt          DateTime?
+  receiptCode        String? // receipt created on accept
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Exception flags / review items (Phase 4) — only MEDIUM+ stored; LOW is just ledger-logged
+// ---------------------------------------------------------------------------
+
+model ExceptionFlag {
+  id        Int      @id @default(autoincrement())
+  type      String // REPEATED_MISMATCH | STAFF_ANOMALY | LARGE_ADJUSTMENT
+  severity  String // MEDIUM | HIGH
+  message   String // plain-language reason, mirrors the plan's example style
+  refType   String // ADJUSTMENT
+  refId     Int?
+  refCode   String?
+  status    String // OPEN | REVIEWED
+  createdBy Int?
+  createdAt DateTime @default(now())
+  reviewedBy Int?
+  reviewedAt DateTime?
 }

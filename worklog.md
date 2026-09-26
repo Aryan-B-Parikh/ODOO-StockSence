@@ -1,201 +1,271 @@
 # StockSense — Worklog & Handover Document
 
-**Project**: StockSense — AI-Powered Stock Market Intelligence Platform
-**Stack**: Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · shadcn/ui · Prisma+SQLite · Zustand · TanStack Query · Recharts · socket.io · z-ai-web-dev-sdk (backend AI)
-**Route**: single user-visible route `/` (client-side tab switching)
+**Project**: StockSense — Warehouse Inventory Management System (NOT a stock-market app — "stock" = physical goods)
+**Source of truth**: user-provided "IMPLEMENTATION PLAN — REVISED · Six Phases to Build It"
+**Stack**: Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · shadcn/ui · Prisma+SQLite · Zustand · TanStack Query · Recharts
+**Route**: single user-visible route `/` (client-side view switching)
+
+## ⚠️ PIVOT NOTE (context for all agents)
+The previous session built a WRONG app (stock-market dashboard) — it has been fully torn down (old api routes, market engine, mini-service, views all deleted; WS service killed; DB wiped). Everything now follows the Implementation Plan: **Phases 0/1 core (inventory engine, split quantities, ledger, permissions) + Phase 3/4 intelligence (supplier-aware reorder with explanations, severity-ranked exceptions, cycle counts, Needs Attention panel)**.
 
 ## IMPORTANT NOTES FOR ALL AGENTS
-- Market data is 100% SIMULATED by a deterministic engine (`src/lib/market/engine.ts`). Prices move every minute + sub-minute jitter, 24/7. Deterministic = the Next.js API process and the WebSocket service produce IDENTICAL prices at the same wall-clock time.
-- `z-ai-web-dev-sdk` MUST only be used in backend/API routes (server side). NEVER in client components.
-- All API requests from the client use RELATIVE paths. For the WebSocket service use `io('/?XTransformPort=3003')` (never a port in the host).
-- Do NOT run `bun run dev` (system runs it on port 3000). Check `/home/z/my-project/dev.log` for errors.
+- The inventory engine lives in `src/lib/inventory.ts` — API routes MUST use its functions inside `db.$transaction` (never mutate StockLevel directly). The engine guarantees: available = onHand − reserved everywhere, atomic check-then-update, no overselling, no negative stock, ledger entry for every change.
+- All API requests from the client use RELATIVE paths (e.g. `/api/products`).
+- Do NOT run `bun run dev` (system runs it on port 3000). Check `/home/z/my-project/dev.log` for errors. No WebSocket services needed anymore.
 - Run `bun run lint` before finishing. Do NOT write test files.
-- UI rules: NO blue/indigo colors. Up = emerald/green, down = red/rose. Sticky footer (min-h-screen flex flex-col + footer mt-auto). Responsive mobile-first. Use existing shadcn/ui components in src/components/ui.
+- UI rules: NO blue/indigo colors. Severity palette: red=critical/stockout, orange=review, amber=high, emerald=positive/success, zinc neutrals. Sticky footer (min-h-screen flex flex-col + footer mt-auto). Responsive mobile-first (sidebar collapses to bottom-nav/hamburger). Use existing shadcn/ui components in src/components/ui.
+- Demo credentials (shown on login screen): manager@stocksense.app / Manager123! (Mia Torres, INVENTORY_MANAGER, all permissions) · staff@stocksense.app / Staff123! (Dev Patel, WAREHOUSE_STAFF) · sam@stocksense.app / Staff123! (Sam Reyes, staff — the "anomaly" demo user)
 - After finishing your task you MUST append your work record to this file (append, never overwrite).
+
+## SEEDED DATA SNAPSHOT (all seeded through the real engine, ledger reconciles)
+- 1 warehouse WH1 "Riverside Distribution Center" · 3 zones (A Bulk Storage, B Pick Faces, C Cold & Chemicals) · 6 racks · 17 shelf locations
+- 6 suppliers (Metro Steel 5d, Northplast 7d, CircuitHub 10d, BlueRidge 4d, Ironclad 3d, Lumen 12d — each with MOQ/order multiples)
+- 20 SKUs across Raw Materials / Electronics / Packaging / Fasteners / Consumables / Chemicals
+- Key states: Steel Rods onHand 80 · reserved 20 → projected 60 < reorder point 75 (PENDING suggestion: 100 kg Metro Steel — plan's exact example); Controller Board 2 pcs (STOCKOUT, safety 3); Cartons 850 onHand · 250 reserved (below reorder); Sensor 32 onHand · 6 reserved · 40 incoming (delayed receipt, CircuitHub 4 days late)
+- Deliveries in every state: RESERVED (GreenField Retail — today), PICKED (Metro Fitouts), PACKED not delivered (Riverside Contractors), DELIVERED ×4 (history)
+- Transfer IN_TRANSIT (30 kg HDPE A3-S1→C1-S1); 1 received transfer (history)
+- Adjustments: 2 POSTED MEDIUM (Steel, flagged), 7 POSTED LOW by Sam Reyes (last one triggers STAFF_ANOMALY flag), 1 PENDING_APPROVAL HIGH (removes 43% of Steel at A2-S2 — also REPEATED_MISMATCH flag)
+- Cycle counts: 1 COMPLETED clean (zero variance → no adjustment), 1 OPEN overdue (Rack B1 S2), 1 OPEN upcoming (Steel Rods weekly)
+- Attention totals: 3 below reorder · 1 stockout · 1 pending approval · 5 open flags · 1 delayed receipt · 3 pending suggestions
+- 88 immutable ledger entries (LEDGER-2026-000001…)
 
 ---
 Task ID: 0
 Agent: main (Z.ai Code)
-Task: Foundation — Prisma schema, deterministic market engine, news generator, shared types, seed
+Task: Foundation — teardown of wrong app, new Prisma schema, inventory engine, auth, seed
 
 Work Log:
-- Created `prisma/schema.prisma` — models: Stock, NewsItem (unique dateKey+slot), WatchItem, Transaction, AnalysisReport, ChatMessage. Ran `bun run db:push`.
-- Created `src/lib/market/universe.ts` — 46 US large-cap stocks with meta (sector, marketCap, pe, eps, div yield, beta, vol, ceo, hq, description…) + 3 index defs (SPX/NDX/DJI).
-- Created `src/lib/market/engine.ts` — deterministic engine (details below).
-- Created `src/lib/market/news.ts` — deterministic news generator (23 items/day, sentiment biased to the stock's daily move).
-- Created `src/lib/types.ts` — shared DTOs for API + frontend.
-- Created & ran `prisma/seed.ts` — seeded 46 stock profiles, 28 news items (today+yesterday), watchlist (AAPL, NVDA, TSLA, MSFT, AMZN), 8 demo transactions (paper portfolio).
+- Killed market-ticker WS service (port 3003 freed), deleted all stock-market code (src/app/api, src/lib/market, src/lib/portfolio.ts, src/components/{shared,shell,stock,views}, src/stores, mini-services/market-ticker), wiped DB.
+- Wrote `prisma/schema.prisma`: User/Session (permissions JSON), Warehouse/Zone/Rack/Location (hierarchy + fullPath), Product/Supplier/ProductSupplier (MOQ, orderMultiple, preferred), StockLevel (onHand/reserved/incoming/inTransit/damaged unique per product+location), Receipt(+lines), DeliveryOrder(+lines), Transfer(+lines), Adjustment(+lines), LedgerEntry (code LEDGER-YYYY-NNNNNN, docType, docCode, field, prevQty, newQty, diff, reason, performedBy, approvedBy), CycleCount(+lines), ReorderSuggestion, ExceptionFlag. Pushed + generated.
+- Wrote `src/lib/permissions.ts` (9 granular actions, ROLE_DEFAULTS, hasPermission).
+- Wrote `src/lib/types.ts` — ALL DTOs (SessionUser, ProductDTO, ReceiptDTO, DeliveryDTO, TransferDTO, AdjustmentDTO, LedgerEntryDTO, CycleCountDTO, ReorderSuggestionDTO, AttentionDTO, DashboardDTO, MetaDTO, SearchResultDTO…).
+- Wrote `src/lib/http.ts` (HttpError), `src/lib/auth.ts` (scrypt hash/verify, sessions in DB, cookie sns_session, getSessionUser/requireUser/requirePermission), `src/lib/format.ts` (fmtUSD, fmtQty, fmtSignedQty, fmtDate/DateTime, timeAgo/timeUntilStr, deltaColor).
+- Wrote `src/lib/inventory.ts` — THE ENGINE: nextDocCode (RCPT-/DEL-/TRF-/ADJ-/CNT-), nextLedgerCode, bumpStock (single place quantities change — clamps ≥0, posts ledger per field), createReceipt/receiveReceipt/cancelReceipt (Expected→Received→Available), createDelivery/markPicked/markPacked/markDelivered/cancelDelivery (reserve at creation, deduct at pack), createTransfer/receiveTransfer/cancelTransfer (In Transit state), createAdjustment (severity: LOW<2% auto · MEDIUM 2-15% or repeated 3rd-in-30d → flagged · HIGH>15% held for approval · CRITICAL below-zero blocked 422 · STAFF_ANOMALY >6/7d), approve/rejectAdjustment, createCount/submitCount (variance→auto-adjustment through severity engine), computeNeeds (projected = onHand+incoming−reserved), refreshSuggestions (supplier-aware target, MOQ/multiple rounding, plan-style reason text), acceptSuggestion (creates real receipt), dismissSuggestion.
+- Wrote `src/lib/attention.ts` — computeAttention (Needs Attention items+summary) + computeDashboard (KPIs, valueByCategory, rack breakdown with fillPct, 14-day flows from ledger, recent activity).
+- Wrote `src/lib/mappers.ts` — toProductDTO/toReceiptDTO/toDeliveryDTO/toTransferDTO/toAdjustmentDTO/toLedgerDTO/toCountDTO/toSuggestionDTO + *INCLUDE constants.
+- Wrote `prisma/seed.ts` — chronological simulation via the real engine (op → backdate): 20d of history, all states represented, verified output (see snapshot above).
+- Placeholder `src/app/page.tsx` + `src/components/app-root.tsx` (health check) so dev server stays alive; Task 1-b replaces these.
 
 Stage Summary:
-- DB: SQLite at db/custom.db, seeded and ready.
-- Engine verified: realistic quotes (±0-3% daily moves), 1D/5D/1M/1Y candles, indices, sentiment, movers, sectors, search, live ticks; determinism verified.
-
-## ENGINE API (import from '@/lib/market/engine' in Next.js; mini-service imports it via RELATIVE path '../../src/lib/market/engine')
-- `getQuote(symbol): Quote | null` — price, prevClose, change, changePct, dayOpen/High/Low, volume, marketCap(B), peRatio, dividendYield, beta, eps, week52High/Low, spark (27 pts)
-- `getQuotes(): Quote[]` (all 46)
-- `getLiveTicks(): {symbol,p,c,v}[]` — compact ticks for WS broadcast
-- `getCandles(symbol, range: '1D'|'5D'|'1M'|'3M'|'6M'|'1Y'|'2Y'): Bar[]` — Bar {t(epoch ms),o,h,l,c,v}
-- `getIndices(): IndexQuote[]` — SPX/NDX/DJI/VIX with `points` sparkline (40)
-- `getMovers(): {gainers,losers,mostActive}` — Quote[] top 6 each
-- `getSectorPerformance(): {sector,changePct,count,leaders,laggards}[]`
-- `getBreadth(): {advancing,declining,unchanged,total}`
-- `getSentiment(): {score(0-100),label,components:{breadth,momentum,volatility,demand},prevScore}`
-- `searchStocks(q, limit=8): {symbol,name,sector,price,changePct}[]`
-- `getStockProfile(symbol)`, `getAllProfiles()`, `getPeers(symbol): Quote[]`
-- `getCloseOn(symbol, dateKey)`, `getDayChange(symbol, dateKey)`
-- `utcDateKey(date), addDays(key, n)`
-
-## NEWS GENERATOR (import from '@/lib/market/news')
-- `generateRecentNews(): GeneratedNews[]` — today + yesterday, filtered to publishedAt <= now
-- `generateNewsForDate(dateKey)` — deterministic per date
-- API layer persists via upsert on (dateKey, slot) — call ensureNews() pattern (see Task 1-a)
-
-## SHARED TYPES (src/lib/types.ts)
-Quote, Bar, IndexQuote, SectorPerf, MarketBreadth, MarketSentiment, StockDetail, MarketOverview, NewsDTO, WatchItemDTO, HoldingDTO, TransactionDTO, PortfolioSummary, PortfolioDTO, AnalysisReportDTO, ChatMessageDTO, SearchResultDTO, CASH_SEED=100000, ANALYSIS_TTL_MS=45min
-
-## DB access
-`import { db } from '@/lib/db'` (PrismaClient). Models: Stock, NewsItem, WatchItem, Transaction, AnalysisReport, ChatMessage.
+- DB seeded & consistent. Engine + libs DONE and lint-clean. `bun prisma/seed.ts` re-runnable (wipes first).
+- Verification: below reorder = RM-STL-ROD10 60/75, PK-CRT-4030 600/800, EL-CTL-CX2 2/15 (stockout); 3 PENDING suggestions (Steel→100kg Metro Steel, Controller→35, Cartons→1300); 1 PENDING_APPROVAL HIGH adjustment; 5 open flags; 1 delayed receipt; 88 ledger entries.
 
 =====================================================================
-REMAINING TASKS + CONTRACTS (for subagents)
+TASKS + CONTRACTS (for subagents)
 =====================================================================
 
 ## Task 1-a — Next.js API routes (backend agent)
-Files: everything under `src/app/api/**` (you own this tree), plus `src/lib/portfolio.ts` if needed for shared logic.
-Use `export const dynamic = 'force-dynamic'` on routes reading live data.
+Files you own: everything under `src/app/api/**`. Use `export const dynamic = 'force-dynamic'` on all routes. Next 16: `await params` (Promise params). Wrap engine mutations in `await db.$transaction(tx => engineFn(tx, …))`. Errors: catch HttpError → `NextResponse.json({ error: e.message }, { status: e.status })`; unexpected → 500 { error: 'Internal error' }. Auth via `requireUser()` / `requirePermission('action')` from '@/lib/auth' (throws 401/403 HttpError — catch and forward).
 
 Endpoints (all JSON):
-1. `GET /api/market/overview` → MarketOverview { serverTime, indices, breadth, sentiment, movers{gainers,losers,mostActive}, sectors }
-2. `GET /api/stocks?search=&sector=&sort=&order=asc|desc&limit=` → { stocks: Quote[] } — sort keys: symbol,name,price,changePct,volume,marketCap,peRatio,dividendYield — default sort marketCap desc. search matches symbol/name case-insensitive.
-3. `GET /api/stocks/[symbol]` → StockDetail { quote, profile (from getStockProfile + description etc), peers: Quote[] } — 404 if unknown
-4. `GET /api/stocks/[symbol]/candles?range=` → { symbol, range, bars: Bar[] } (validate range in list, default 1D)
-5. `GET /api/news?symbol=&limit=30&offset=0` → { news: NewsDTO[] } — FIRST call `ensureNews()` (see below), then query NewsItem where publishedAt <= now, optional symbol filter (symbol null items are macro news), order by publishedAt desc. Join symbolName via universe (STOCK_BY_SYMBOL). NewsDTO includes id, symbol, symbolName, headline, summary, source, sentiment(number), sentimentLabel, impact, publishedAt(ISO), aiSummary.
-   - `ensureNews()`: for dateKeys [today, yesterday] (UTC) call generateNewsForDate, upsert each item into NewsItem (unique dateKey_slot). Skip upsert if count for dateKey exists. Wrap in try/catch.
-6. `POST /api/news/[id]/ai-summary` → uses z-ai-web-dev-sdk LLM: system prompt "You are a financial news analyst. Given a headline and summary, produce: (1) a 2-3 sentence crisp AI summary, (2) sentiment score between -1 and 1, (3) impact for the stock (HIGH/MEDIUM/LOW). Reply with STRICT JSON {\"summary\":string,\"sentiment\":number,\"impact\":string}" — parse JSON safely (strip markdown fences). Cache result in NewsItem.aiSummary (string, store as the summary text). GET returns cached. Response: { summary, sentiment, impact }. If LLM fails, fall back to a locally computed summary (use existing summary text) with 200 + { fallback: true }.
-7. `GET /api/watchlist` → { items: WatchItemDTO[] } — quote from engine + alert triggered flags computed: alertAboveHit = alertAbove != null && quote.price >= alertAbove, alertBelowHit similarly.
-8. `POST /api/watchlist` body {symbol, note?} → validate symbol exists → upsert (unique symbol). `PATCH /api/watchlist/[symbol]` body {note?, alertAbove?, alertBelow?} (null clears). `DELETE /api/watchlist/[symbol]`.
-9. `GET /api/portfolio` → PortfolioDTO. Compute from ALL transactions chronologically:
-   - cash = CASH_SEED + Σ(sell proceeds - fees) - Σ(buy costs + fees)
-   - per symbol net quantity>0 → holdings with avgCost (weighted), costBasis, marketValue=qty*livePrice, dayChange=qty*(price-prevClose), pnl=marketValue-costBasis, pnlPct, allocation=marketValue/positionsValue*100, quote
-   - summary: cash, positionsValue, totalValue, totalCost, dayChange (Σ), dayChangePct, totalPnl = (totalValue - CASH_SEED) + realizedNote... simpler: totalPnl = totalValue - (CASH_SEED + netDeposits(=0)) → totalValue - CASH_SEED (includes realized+unrealized). totalPnlPct relative to CASH_SEED. best/worst by pnlPct among holdings.
-   - transactions: latest 50 desc, mapped to TransactionDTO.
-10. `POST /api/portfolio/trade` body {symbol, side:'BUY'|'SELL', quantity>0, price?} → validate symbol; price = provided or live getQuote price; fee=0.99. BUY: cost=qty*price+fee must be <= cash else 400 {error}. SELL: qty <= owned qty else 400 {error}. Insert Transaction, return updated PortfolioDTO.
-11. `DELETE /api/portfolio/transaction/[id]` → delete + return updated PortfolioDTO.
-12. `GET /api/portfolio/history?days=30` → { points: {t: epochMs, value:number}[] } — portfolio total value per day for past N days: for each dateKey, cash(t) = CASH_SEED + Σ trades executed <= endOfDay(t) (sells minus buys incl fees), positions value = Σ symbols net qty at t × getCloseOn(symbol, dateKey). Plus final live point (now).
-13. `POST /api/analysis/[symbol]` → if AnalysisReport exists for symbol with createdAt > now-ANALYSIS_TTL_MS, return it. Else generate via LLM (z-ai-web-dev-sdk):
-    - Context: quote, profile, fundamentals (pe, eps, divYield, beta, marketCap, week52 range), 30-day trend from getCandles(symbol,'1M') (compute % change, volatility, high/low), sector performance, 3 latest news headlines for the symbol (from DB).
-    - System: "You are StockSense AI, an expert equity analyst. Produce a concise but insightful markdown research note. Use these EXACT sections: ## Executive Summary, ## Bull Case, ## Bear Case, ## Key Risks, ## Technical View, ## Verdict. In Verdict include on separate lines: `Rating: BUY|HOLD|SELL`, `Score: X/10`, `Price Target: $LOW - $HIGH`. Be specific, reference the numbers provided. 350-500 words."
-    - Parse rating/score/targets with regex from content. Store in AnalysisReport. Return { report: AnalysisReportDTO }.
-    - `GET /api/analysis/[symbol]` → latest report or { report: null }.
-    - On LLM failure → 503 { error: 'AI service unavailable, please retry' }.
-14. `POST /api/chat` body { sessionId, message } → save user ChatMessage; build context block: current top movers (3 gainers/3 losers with %), user watchlist symbols with prices, portfolio holdings summary, and if message mentions any known symbol (match against universe symbols/names) include that stock's quote+fundamentals. System prompt: "You are StockSense AI Analyst, a helpful market assistant for the StockSense platform. Data provided is SIMULATED market data. Be concise (under 200 words), use markdown formatting, reference the provided live context when relevant. Never guarantee returns; include a light disclaimer when giving anything resembling advice." Multi-turn: load last 10 messages of session for history. Save assistant reply. Return { reply }. On LLM failure return 503 with friendly error.
-15. `GET /api/chat?sessionId=` → { messages: ChatMessageDTO[] } (last 50 asc).
-16. `GET /api/search?q=` → { results: SearchResultDTO[] } via searchStocks.
-17. `GET /api/health` → { ok: true, time }.
+1. `POST /api/auth/login` {email,password} → verify → createSession → set cookie sns_session (httpOnly, path /, sameSite lax, expires) → {user: SessionUser}. 401 invalid credentials.
+2. `POST /api/auth/logout` → destroy session + clear cookie → {ok:true} (401-safe: also ok if no session).
+3. `GET /api/auth/me` → {user: SessionUser|null}.
+4. `GET /api/health` → {ok:true,time}.
+5. `GET /api/meta` (auth) → MetaDTO: warehouses, locations (fullPath + zoneName + rackCode + code), suppliers (id,name,leadTimeDays), products (id,sku,name,unit,category + per-location availability: also return locations per product? keep flat: products get aggregated onHand/reserved/available), categories list.
+6. `GET /api/products` (auth) ?search=&category=&belowReorder=1&stockout=1&sort=&order= → {products: ProductDTO[], categories: string[], summary}. Use mappers.PRODUCT_INCLUDE + toProductDTO. Filter computed DTOs in JS (small dataset). Default sort: sku asc.
+7. `GET /api/products/[id]` (auth) → {product: ProductDTO} (404 unknown). Include stockByLocation + suppliers.
+8. `POST /api/products` (perm 'configure') {sku,name,category,unit,unitCost,reorderPoint,dailyUsage,safetyStock,valueClass,notes?,supplierIds?: number[]} → create + links (first supplier preferred) → {product}. Validate sku unique → 400.
+9. `PATCH /api/products/[id]` (perm 'configure') → update fields (+optional supplierIds replace) → {product}.
+10. `GET /api/receipts` (auth) ?status=&delayed=1 → {receipts: ReceiptDTO[]} (RECEIPT_INCLUDE, order createdAt desc, map with toReceiptDTO).
+11. `POST /api/receipts` (perm 'receive') {supplierId?,expectedAt?,note?,lines:[{productId,locationId,expectedQty}]} → engine.createReceipt → {receipt: ReceiptDTO} (re-fetch with include).
+12. `GET /api/receipts/[id]` → {receipt}. `POST /api/receipts/[id]/receive` (perm 'receive') {lines:[{lineId,receivedQty,damagedQty?}],note?} → engine.receiveReceipt → {receipt}. `POST /api/receipts/[id]/cancel` (perm 'receive') → {receipt}.
+13. `GET /api/deliveries` ?status= → {deliveries: DeliveryDTO[]} (DELIVERY_INCLUDE). Also fetch all stockLevels once to build stockByProductLocation Map for availableAtLocation.
+14. `POST /api/deliveries` (perm 'pick') {customer,note?,lines:[{productId,locationId,qty}]} → engine.createDelivery → {delivery} (400 insufficient available).
+15. `GET /api/deliveries/[id]` → {delivery}. `POST /api/deliveries/[id]/pick` (perm 'pick') → markDeliveryPicked. `/pack` (perm 'pack') → markDeliveryPacked. `/deliver` (any authed) → markDeliveryDelivered. `/cancel` (perm 'pick') → cancelDelivery. All → {delivery}.
+16. `GET /api/transfers` ?status= → {transfers: TransferDTO[]}. `POST /api/transfers` (perm 'transfer') {fromLocationId,toLocationId,note?,lines:[{productId,qty}]} → {transfer}. `GET /api/transfers/[id]` → {transfer}. `POST /api/transfers/[id]/receive` (perm 'transfer') → {transfer}. `POST /api/transfers/[id]/cancel` (perm 'transfer') → {transfer}.
+17. `GET /api/adjustments` ?status=&severity= → {adjustments: AdjustmentDTO[]} (ADJUSTMENT_INCLUDE + user names Map for createdByName/approvedByName).
+18. `POST /api/adjustments` (perm 'adjust') {reason,note?,lines:[{productId,locationId,countedQty}]} → engine.createAdjustment → 201 {adjustment: AdjustmentDTO, explanation, flagsCreated, severity}. (422 on CRITICAL block.)
+19. `POST /api/adjustments/[id]/approve` (perm 'approve-adjustment') → {adjustment}. `POST /api/adjustments/[id]/reject` (perm 'approve-adjustment') → {adjustment}.
+20. `GET /api/ledger` (auth) ?docType=&productId=&locationId=&from=&to=&q=&limit=50&offset=0 → {entries: LedgerEntryDTO[], total, docTypes: unique list} (LEDGER_INCLUDE + user names, order createdAt desc). q matches code/docCode/sku/reason (case-insens).
+21. `GET /api/counts` ?status= → {counts: CycleCountDTO[]} (COUNT_INCLUDE; adjustmentCodes = codes of adjustments whose reason contains count.code; map with toCountDTO).
+22. `POST /api/counts` (perm 'count') {scope:'LOCATION'|'PRODUCT',locationId?,productId?,dueDate?,note?} → engine.createCount → {count}.
+23. `POST /api/counts/[id]/submit` (perm 'count') {lines:[{lineId,countedQty}],note?} → engine.submitCount → {count, adjustment?: {code,severity,status,explanation} | null}. `POST /api/counts/[id]/cancel` (perm 'count') → {count}.
+24. `GET /api/reorder` (auth) → engine.refreshSuggestions() then map each with needs (computeNeeds) → {suggestions: ReorderSuggestionDTO[]} (include product.stocks in include for fallback; preferred supplier link's minOrderQty/orderMultiple: fetch ProductSupplier for product+preferredName to fill minOrderQty/orderMultiple fields).
+25. `POST /api/reorder/[id]/accept` (perm 'approve-reorder') {expectedAt?} → engine.acceptSuggestion → {suggestion}. `POST /api/reorder/[id]/dismiss` (perm 'approve-reorder') → {suggestion}.
+26. `GET /api/attention` (auth) → computeAttention → shape: {summary, items, flags: ExceptionFlagDTO[], below: ProductNeed-lite[], stockouts: same[]}. For flags map: {id,type,severity,message,refCode,status,createdAt}.
+27. `POST /api/attention/flags/[id]/review` (perm 'approve-adjustment') → set status REVIEWED, reviewedBy/At → {flag}.
+28. `GET /api/dashboard` (auth) → computeDashboard → DashboardDTO (activity uses toLedgerDTO shape, attention as in 26).
+29. `GET /api/search?q=` (auth) → {results: SearchResultDTO[]} — products by sku/name prefix/substring (limit 8) with aggregated onHand/available/belowReorder.
 
-LLM usage pattern (backend only):
-```ts
-import ZAI from 'z-ai-web-dev-sdk'
-const zai = await ZAI.create()
-const completion = await zai.chat.completions.create({
-  messages: [{ role: 'assistant', content: systemPrompt }, { role: 'user', content: userPrompt }],
-  thinking: { type: 'disabled' },
-})
-const reply = completion.choices?.[0]?.message?.content ?? ''
-```
-Test EVERY endpoint with curl (the dev server is on port 3000; internal fetch/curl to http://localhost:3000/api/... is fine for testing). Verify JSON shapes match this contract. Handle errors gracefully (400/404/500 with { error }).
+Testing: curl EVERY endpoint (dev server on :3000). Login flow: `curl -c /tmp/cj.txt -X POST localhost:3000/api/auth/login -H 'content-type: application/json' -d '{"email":"manager@stocksense.app","password":"Manager123!"}'` then `-b /tmp/cj.txt`. Test permissions (staff gets 403 on approve). Test CRITICAL block (adjust to −5). Test insufficient-available 400 on delivery. Verify JSON matches DTOs in src/lib/types.ts.
 
-## Task 1-b — WebSocket market-ticker mini-service
-Files: `mini-services/market-ticker/{package.json,index.ts}` (you own this tree).
-- package.json: name market-ticker, type module, scripts: { "dev": "bun --hot index.ts" }, dependencies: socket.io ^4.8.1 (install with bun).
-- Port 3003. socket.io Server with path '/' and cors origin '*' (copy pattern from /home/z/my-project/examples/websocket/server.ts).
-- Import engine RELATIVELY: `import { getLiveTicks } from '../../src/lib/market/engine'`
-- On connection: emit 'snapshot' with { t: Date.now(), ticks: getLiveTicks() }.
-- Every 2000ms broadcast 'tick' { t: Date.now(), ticks: getLiveTicks() }.
-- Log connection count. Graceful shutdown.
-- Start it: `cd mini-services/market-ticker && bun install && (nohup bun run dev > /tmp/market-ticker.log 2>&1 &)`. Verify with a small bun client script (socket.io-client from the main project's node_modules or install) that ticks arrive. Also verify the engine import works from that folder.
+## Task 1-b — App shell + Login + Dashboard (frontend agent)
+Files you own: `src/app/page.tsx` (REWRITE — remove app-root placeholder usage), `src/app/providers.tsx`, `src/app/layout.tsx` (metadata + font), `src/app/globals.css` (theme polish only), `src/components/app-root.tsx` (REWRITE), `src/stores/*` (new), `src/components/shell/*`, `src/components/views/dashboard-view.tsx` + `dashboard/*`.
+- `src/stores/auth-store.ts` (Zustand): {user: SessionUser|null, status: 'loading'|'authed'|'anon', init() (GET /api/auth/me), login(email,pw), logout()}.
+- `src/stores/ui-store.ts`: {view: 'dashboard'|'products'|'receipts'|'deliveries'|'transfers'|'adjustments'|'counts'|'history'|'alerts'|'reorder', setView(v), productDetailId: number|null, openProduct(id), closeProduct(), metaPanelOpen} — supports deep-link via location.hash (e.g. #view=receipts) optional.
+- app-root.tsx: if status loading → full-screen skeleton with 📦 pulse; if anon → <LoginView/>; else <AppShell/>.
+- LoginView: split card — left brand panel (📦 StockSense, tagline "Warehouse inventory intelligence — every unit tracked, reserved, and reconciled.", stock-state pipeline graphic: Expected→Received→Available / Available→Reserved→Picked→Packed→Delivered), right form (email+password via react-hook-form + zod, error toast on 401). Demo-credential quick-fill chips (Manager / Staff). Subtle framer-motion entrance.
+- AppShell: desktop = fixed left sidebar (w-60): brand, nav items with icons (LayoutDashboard Dashboard, Package Products, Truck Receipts, ClipboardList Deliveries→icon TruckIcon/PackageCheck? use: Truck Receipts, ClipboardCheck Deliveries, ArrowLeftRight Transfers, SlidersHorizontal Adjustments, ScanLine Counts, ScrollText Move History, Siren Alerts & Review, ShoppingCart Reorder) + at bottom: user card (name, role badge, logout). Topbar: view title + breadcrumb-ish subtitle, global product search (Popover+Command: GET /api/search?q= debounced, click → openProduct), refresh button. Mobile: topbar with hamburger (Sheet) or bottom nav (max 5 + More). Sticky footer: "StockSense · Riverside Distribution Center · simulated demo environment" — MUST stick to bottom (min-h-screen flex flex-col, footer mt-auto).
+- DashboardView (TanStack Query ['dashboard'] → GET /api/dashboard, 30s refetch, skeleton): 
+  1) KPI cards row: Total Stock Value, Available Value (+Reserved/Incoming/In-transit/Damaged mini-rows), Open Deliveries, Expected Receipts, Low Stock (red if >0), Stockouts (red). 
+  2) "Needs Attention" panel (the Phase 4 action list): items sorted red→orange→green, each row: icon, title, detail, chevron → setView(item.href). Counts badges in KPI cards.
+  3) Charts row (Recharts): value by category donut (Pie + Cell colored by category — emerald/teal/amber/stone/rose/cyan-free palette, no blue), 14-day flows bar chart (received vs delivered value, grouped bars).
+  4) Rack floor-plan grid: tiles per rack (rackCode, zoneName, value, fill bar by fillPct — emerald intensity) — "Zone A · Rack A1" caption.
+  5) Recent activity: last 8 ledger entries (code, docCode chip colored by docType, sku, field delta signed emerald/red, timeAgo, performedBy). 
+- Loading: skeletons everywhere. Empty states. Framer-motion subtle. NO blue/indigo.
 
-## Task 1-c — Frontend shell (main agent, DONE — see contract below for view agents)
+## Task 2-a — Products + Receipts views (frontend agent)
+Files you own: `src/components/views/products-view.tsx` + `products/*`, `src/components/views/receipts-view.tsx` + `receipts/*`, `src/components/shared/*` (shared presentational bits you create: StatusBadge, SeverityBadge, EmptyState, etc.).
+- ProductsView: summary strip (SKUs, total value, below reorder, stockouts); filters (search input, category Select, belowReorder/stockout toggles); table (SKU+name, category chip, unit, Unit Cost, On-hand, Reserved, Available (bold), Incoming, In transit, Damaged, Reorder Point, Status badge [OK emerald / Below reorder amber / Stockout red]); click row → ProductDetailDialog; "New Product" button (perm 'configure') → create dialog (react-hook-form + zod: sku, name, category, unit, unitCost, reorderPoint, dailyUsage, safetyStock, valueClass, optional supplier select). 
+- ProductDetailDialog (Dialog max-w-3xl scrollable): header (SKU, name, category chip, valueClass chip), big quantity cards (On-hand, Reserved, Available emphasized, Incoming, In transit, Damaged), reorder profile card (reorder point = "usage × lead + safety" breakdown vs projected available → status), stock-by-location table (fullPath, onHand, reserved, available, incoming, inTransit, damaged), supplier list (preferred star, lead time, cost, MOQ, multiple), recent ledger for product (GET /api/ledger?productId= limit 10) compact.
+- ReceiptsView: status filter tabs (All / Expected / Received / Cancelled) + "delayed only" toggle; cards or table: code chip, supplier, status badge (EXPECTED amber / RECEIVED emerald / CANCELLED stone), expectedAt (+"X days late" red badge), lines preview (n lines · total qty), createdAt. Detail dialog: lines table (sku, location, expected, received, variance), Receive form for EXPECTED (per-line receivedQty + damagedQty inputs prefilled=expected, note) → POST receive → toast; Cancel button (confirm AlertDialog) for EXPECTED. "New Receipt" button (perm 'receive') → create dialog: supplier Select (GET /api/meta), expectedAt date input, dynamic lines (product Select with availability hint, location Select (fullPath), expectedQty), submit → toast + invalidate.
+- Live data: refetch 30s; invalidate ['receipts'] after mutations. Permission-gate buttons via useAuthStore user.permissions.
 
-## Task 2-a — Dashboard + Markets views (frontend agent)
-Files you own: `src/components/views/dashboard-view.tsx`, `src/components/views/markets-view.tsx`, plus `src/components/views/dashboard/*` and `src/components/views/markets/*` subfolders if you want subcomponents. Do NOT edit any other files (imports must come from existing shared modules; if something essential is missing, add it to YOUR files only).
-- Dashboard view: 4 index cards (value, change, ChangeBadge, Sparkline) + VIX; Fear & Greed sentiment gauge (custom SVG semicircle gauge with needle, score + label + 4 component mini-bars); Market breadth bar (advancing vs declining); Top Gainers / Top Losers / Most Active 3-column lists (click → open stock detail via useUIStore().openStock(symbol)); sector heatmap grid (colored tiles by changePct, tooltip with leaders/laggards); latest 3 news headlines strip (from /api/news limit 3, sentiment badge). Data: TanStack Query on ['overview'] → GET /api/market/overview (10s refetchInterval), plus live overlay from useMarketStore for displayed symbols where sensible.
-- Markets view: full screener — search input, sector Select filter, sortable columns (Symbol, Name, Price, Day Change%, Day Change$, Volume, Mkt Cap, P/E, Div Yield, 7D trend Sparkline) using @tanstack/react-table + existing shadcn table components; click row → openStock(symbol); live price flash from useMarketStore ticks (green/red bg pulse). GET /api/stocks with server-side sort/filter? Client-side filtering of the fetched list is fine (fetch all once, filter client-side; refetch every 15s).
-- Loading: skeleton components. Empty states. Framer-motion subtle entrance animations. Fully responsive (cards stack on mobile, table horizontally scrollable).
+## Task 2-b — Deliveries + Transfers + Adjustments views (frontend agent)
+Files you own: `src/components/views/deliveries-view.tsx` + `deliveries/*`, `src/components/views/transfers-view.tsx` + `transfers/*`, `src/components/views/adjustments-view.tsx` + `adjustments/*`.
+- DeliveriesView: tabs (All / Reserved / Picked / Packed / Delivered / Cancelled); rows: code, customer, status badge with state-pipeline visual (RESERVED→PICKED→PACKED→DELIVERED stepper — 4 dots, filled up to current, cancelled = struck), lines count, createdAt; click → detail dialog: customer, note, stepper visual, lines table (sku, location, qty, picked, available-at-location), action buttons by status+permission: Pick (RESERVED, perm pick), Pack (RESERVED|PICKED, perm pack), Deliver (PACKED), Cancel (RESERVED|PICKED) — each with confirm AlertDialog + toast + explanation copy ("Packing deducts stock — units physically leave the warehouse"). "New Delivery" (perm pick): customer, note, lines (product, location Select showing available, qty with available hint; validate qty ≤ available client-side too).
+- TransfersView: rows: code, from → to (two location paths with arrow), status badge (IN_TRANSIT amber / RECEIVED emerald / CANCELLED stone), lines count, shippedAt, receivedAt; detail: lines table, Receive button (perm transfer) when IN_TRANSIT, Cancel button; note that receiving moves In-transit → On-hand at destination. "New Transfer" (perm transfer): from/to location Selects (must differ), lines (product + qty ≤ available at source shown), note.
+- AdjustmentsView: tabs (All / Pending approval / Posted / Rejected / By severity); rows: code, reason (truncate), severity badge (LOW emerald / MEDIUM amber / HIGH red outline), status badge (PENDING_APPROVAL amber pulse / POSTED emerald / REJECTED stone), createdByName, createdAt, lines count; detail dialog: explanation banner (from POST response stored? No — GET detail: show severity + reason + lines table with systemQty → countedQty (delta signed colored)), note; for PENDING_APPROVAL + perm approve-adjustment: Approve (emerald) / Reject buttons with AlertDialog ("Approving posts the stock change to the ledger"); Approve 422 (stock changed) → error toast shows engine message. "New Adjustment" (perm adjust): reason (required) + note, lines (product, location, systemQty shown live (from meta product availability… fetch /api/products or meta), countedQty input) → POST → response toast shows explanation ("Held for manager approval: removes 43%…" / "Logged automatically…") + if 422 show blocked reason. 
 
-## Task 2-b — Stock detail dialog + trade dialog (frontend agent)
-Files you own: `src/components/stock/stock-detail-dialog.tsx`, `src/components/stock/trade-dialog.tsx`, `src/components/stock/*` subcomponents.
-- StockDetailDialog: controlled by useUIStore (selectedSymbol + detailOpen). Large Dialog (max-w-5xl, scrollable content):
-  - Header: stock logo circle (initials), name (SYMBOL · exchange · sector), live price (from useMarketStore tick overlay with flash), ChangeBadge, watchlist star toggle (乐观 calls /api/watchlist POST/DELETE + toast), Trade button, close.
-  - Range selector (1D 5D 1M 3M 6M 1Y 2Y) → GET /api/stocks/[symbol]/candles?range= (TanStack Query key ['candles', symbol, range]). Recharts AreaChart (emerald/red gradient by overall change) + volume bars (composed, secondary axis, muted). Crosshair tooltip showing OHLC + volume. Responsive.
-  - Key stats grid: Open, Prev Close, Day Range (low–high bar), 52W Range (position marker), Volume, Mkt Cap, P/E, EPS, Div Yield, Beta.
-  - Profile card: description, CEO, HQ, employees, founded, website link.
-  - Peers row: mini cards with symbol+price+change, click switches dialog to that symbol.
-  - AI Analyst section: "Generate AI Analysis" button → POST /api/analysis/[symbol] (loading state with animated shimmer), renders markdown (react-markdown) with rating badge (BUY emerald / HOLD amber / SELL red), score, target range, timestamp; cached report loads on open (GET). Disclaimer note "AI-generated, simulated data".
-  - Recent news list for symbol (GET /api/news?symbol=&limit=5) with sentiment badges.
-- TradeDialog: opened via useUIStore (tradeSymbol). Buy/Sell tabs, quantity input, estimated cost = qty*live price + $0.99 fee, cash / owned qty display (GET /api/portfolio), confirm → POST /api/portfolio/trade → toast success/error, invalidate ['portfolio'] queries. Small/confetti-free, professional.
+## Task 2-c — Move History + Cycle Counts + Alerts & Reorder views (frontend agent)
+Files you own: `src/components/views/history-view.tsx` + `history/*`, `src/components/views/counts-view.tsx` + `counts/*`, `src/components/views/alerts-view.tsx` + `alerts/*`, `src/components/views/reorder-view.tsx` + `reorder/*`.
+- HistoryView (Move History — the immutable ledger): filter bar (docType Select [RECEIPT/DELIVERY/TRANSFER/ADJUSTMENT/COUNT/OPENING], search input (code/docCode/sku/reason), date-from/to, clear); table (code mono chip, docType+docCode chip colored per type, timeAgo, SKU, location path truncated, field, prev → new with signed diff colored emerald/red, reason truncated w/ tooltip, performedBy); pagination (limit 25, total from response, Prev/Next + "x–y of z"); expandable row (chevron) → full detail: reason full, performedBy, all quantities. Note banner: "Immutable audit trail — every entry references the document it came from."
+- CountsView: tabs (Open / Completed / Cancelled); cards: code, scope badge (LOCATION/PRODUCT), target (location path or SKU), cadence chip (WEEKLY/MONTHLY/QUARTERLY with value-class color), dueDate + overdue badge (red), lines count, totalVariance (COMPLETED, signed colored); detail dialog for OPEN: lines with systemQty + countedQty inputs → submit (perm count) → toast shows result ("Count clean — no adjustment opened" OR "Variance found — adjustment ADJ-90xx created (severity X): explanation"); Cancel button. "New Count" (perm count): scope radio (LOCATION → location Select; PRODUCT → product Select), dueDate, note.
+- AlertsView (Alerts & Review): section 1 "Unusual adjustments & review flags" — ExceptionFlag cards (type chip colored by severity, message, refCode link → adjustments view, createdAt, status; OPEN flags have "Mark reviewed" button (perm approve-adjustment) → POST review → toast). Section 2 mini-panel: attention items (same list as dashboard, clickable → setView). 
+- ReorderView: header explainer ("Projected available = on-hand + incoming − reserved, compared against the reorder point"); PENDING suggestion cards (the star of Phase 3): SKU + name + category, big suggested qty ("Order 100 kg · Metro Steel Co. · 5-day lead"), the FULL reason block rendered as pre-wrap mono-ish card (the 4-line plan-style explanation), stat chips (onHand/reserved/incoming/projected vs reorderPoint with progress bar), status actions: Accept (perm approve-reorder — emerald, confirm dialog "Creates an expected receipt RCPT-xxxx…") / Dismiss (stone); after accept → toast with receipt code + card moves to history section. Section 2: decision history (ACCEPTED w/ receipt code chip, DISMISSED) — compact rows. Section 3: "All products reorder status" table (SKU, onHand, reserved, incoming, projected, reorder point, status OK/Below/Stockout) — reuses GET /api/reorder suggestions + products data or GET /api/products?belowReorder=… — your call, keep it clean.
 
-## Task 2-c — News, Portfolio, Watchlist, AI Analyst views (frontend agent)
-Files you own: `src/components/views/news-view.tsx`, `src/components/views/portfolio-view.tsx`, `src/components/views/watchlist-view.tsx`, `src/components/views/analyst-view.tsx` (+ per-view subfolders if needed).
-- NewsView: filter chips (All / Macro only / per-sentiment: Bullish/Bearish/Neutral), symbol filter dropdown; feed of news cards (headline, summary, source, time-ago, sentiment badge colored by score, impact badge, symbol chip clickable → openStock); "AI Summary" button per card → POST /api/news/[id]/ai-summary, expandable result with shimmer loading; GET /api/news?limit=40. Refetch 60s.
-- PortfolioView: summary stat cards (Total Value, Day Change $/%, Total P&L $/%, Cash available, Positions); performance chart (GET /api/portfolio/history?days=30 → Recharts AreaChart); allocation donut (Recharts PieChart with legend) by holding; holdings table (Symbol, Qty, Avg Cost, Price(live), Mkt Value, Day Change, P&L $, P&L %, allocation bar, Trade button → openTrade(symbol), click row → openStock); transactions list (GET from portfolio response) with side badge; Trade button in header. GET /api/portfolio, refetch 15s + on window focus.
-- WatchlistView: grid of watch cards (live price + flash, ChangeBadge, sparkline, day H/L, volume, note, alert inputs: above/below price with save (PATCH), triggered alert shows amber badge + toast once); remove button (DELETE + optimistic update); "Add symbol" combobox (GET /api/search?q= debounced) POST /api/watchlist. GET /api/watchlist refetch 15s. Empty state with CTA to Markets.
-- AnalystView: chat interface — messages list (user right/emerald, assistant left, markdown rendered via react-markdown), suggested prompt chips ("Analyze my portfolio", "What's moving the market today?", "Compare AAPL and MSFT", "Explain the Fear & Greed gauge"), input + send (POST /api/chat {sessionId from localStorage 'sns-chat-session', message}), loading dots animation, session persists via GET /api/chat?sessionId= on mount. Context chips showing what the AI sees (watchlist count, portfolio value). Clear chat (localStorage new id + local state).
-
-## Frontend contracts (built by Task 1-c — AVAILABLE NOW)
-- `src/stores/market-store.ts` (Zustand): `useMarketStore` — { quotes: Record<string, {p:number,c:number,v:number,t:number}>, connected: boolean, lastTickAt: number|null, flash: Record<string, 'up'|'down'>, applyTick(tickData) } — subscribes to WS in a provider; components read `useMarketStore(s => s.quotes['AAPL'])`.
-- `src/stores/ui-store.ts`: `useUIStore` — { activeView: 'dashboard'|'markets'|'news'|'portfolio'|'watchlist'|'analyst', selectedSymbol: string|null, detailOpen: boolean, tradeSymbol: string|null, tradeOpen: boolean, setView(v), openStock(symbol) (sets selectedSymbol, detailOpen=true), closeStock(), openTrade(symbol), closeTrade() }.
-- `src/components/shared/` — `ChangeBadge` ({value: number, pct?: boolean, size?}), `PriceCell` ({symbol, basePrice} live w/ flash), `Sparkline` ({data:number[], width,height, positive}), `StockAvatar` ({symbol,size}), `SentimentBadge` ({score/label}), `ImpactBadge`, `AiBadge`, `SectionHeading`, `SkeletonTable`.
-- `src/lib/format.ts` — fmtUSD, fmtNum, fmtCompact, fmtPct, fmtSigned, timeAgo, priceColor(pct) ('text-emerald-600'/'text-red-600').
-- `src/lib/api.ts` — typed fetch helpers: `api.get<T>(path)`, `api.post<T>(path, body)` throwing {message} on !ok.
-- Page structure: `src/app/page.tsx` renders shell with view switching (AnimatePresence) + global StockDetailDialog + TradeDialog mounted at root. Views are lazy-imported via next/dynamic where sensible.
-- QueryClient default staleTime 15s. Toaster (sonner) configured.
+## Frontend contracts (available NOW)
+- `src/lib/api.ts` — api.get/post/patch/delete (throws ApiError with .status and message from {error}).
+- `src/lib/types.ts` — every DTO.
+- `src/lib/format.ts` — fmtUSD, fmtUSDCompact, fmtQty(n,unit), fmtSignedQty, fmtPct, fmtDate, fmtDateTime, timeAgo, timeUntilStr, titleCase, deltaColor.
+- `src/stores/auth-store.ts` + `ui-store.ts` (built by Task 1-b — wait for them; if you finish first, code against the contract above and adjust imports at integration).
+- Shared components from Task 2-a (StatusBadge etc.) — coordinate via worklog.
 
 ## Verification process (all agents)
-- `bun run lint` must pass.
-- Check `/home/z/my-project/dev.log` tail for runtime errors after touching pages.
-- Backend agent: curl-test each endpoint. Frontend agents: after your files exist, ask main agent for integration check (main runs agent-browser at the end).
+- `bun run lint` must pass. Check dev.log tail for runtime errors after touching files.
+- Backend: curl-test every endpoint incl. auth/permission/4xx paths. Frontend: after your files exist, main agent runs agent-browser integration at the end — write your views so they render standalone inside the shell's <main> region.
 
 ---
 Task ID: 1-b
-Agent: ws-ticker-service
-Task: WebSocket market-ticker mini-service (socket.io on port 3003, broadcasting live engine ticks every 2s)
+Agent: frontend-shell
+Task: App shell, authentication UI, Dashboard view, view registry + stubs
 
 Work Log:
-- Created `mini-services/market-ticker/package.json` (name market-ticker, private, type module, dev script `bun --hot index.ts`, dependency socket.io ^4.8.1) and ran `bun install` there (resolved socket.io@4.8.4, own node_modules + lockfile inside the mini-service).
-- Created `mini-services/market-ticker/index.ts` modeled on `examples/websocket/server.ts`: socket.io Server with path '/', cors origin '*', methods GET/POST, pingTimeout 60000, pingInterval 25000, PORT fixed at 3003.
-- Engine imported RELATIVELY: `import { getLiveTicks } from '../../src/lib/market/engine'`. Verified engine is dependency-free TS (only imports ./universe) and bun imports it fine from the mini-service folder — `bun -e` smoke test returned 46 ticks (AAPL/MSFT/NVDA with price/changePct/volume).
-- On connection: emits 'snapshot' { t: Date.now(), ticks: getLiveTicks() }; `setInterval(2000)` broadcasts io.emit('tick', { t, ticks }) — payload shape { t: number, ticks: { symbol, p, c, v }[] } with p=price, c=changePct, v=volume.
-- Connected-clients count logged on connect/disconnect using `io.sockets.sockets.size` (accurate at both moments; `io.engine.clientsCount` lags on client-initiated disconnects — verified in engine.io/socket.io source).
-- Graceful shutdown on SIGTERM/SIGINT: clearInterval + io.close + httpServer.close + exit 0. Tested live: `kill -TERM` produced "Received SIGTERM … WebSocket server closed" and freed port 3003 cleanly.
-- Started service in background: `cd mini-services/market-ticker && (nohup bun run dev > /tmp/market-ticker.log 2>&1 &)`. Startup log confirms port 3003 + engine import OK.
-- Added `socket.io-client@4.8.4` to the MAIN project deps (it was missing; `cd /home/z/my-project && bun add socket.io-client`) so the throwaway test client (and later the frontend market-store) can use it.
-- Wrote throwaway client `/tmp/ticker-test.ts` (socket.io-client → http://localhost:3003, direct localhost for this internal test only) and ran it with bun from the main project folder: connects, receives 'snapshot' + 2 × 'tick', prints first 3 ticks of each payload, sanity-checks field types, exits 0.
+- Rewrote `src/app/layout.tsx` metadata (title "StockSense — Warehouse Inventory Intelligence", warehouse/stack keywords) — Geist fonts + Providers kept as-is. `src/app/page.tsx` renders `<AppRoot/>`.
+- Polished `src/app/globals.css`: removed market-app leftovers (marquee, flash-up/down); kept the emerald/teal + warm-neutral oklch palette, pulse-dot, shimmer, thin custom scrollbars, `.tabular` utility.
+- Built `src/stores/auth-store.ts` (Zustand): user/status('loading'|'authed'|'anon')/init→GET /api/auth/me/login→POST /api/auth/login/logout→POST /api/auth/logout (logout is 401-safe, clears locally in finally).
+- Built `src/stores/ui-store.ts`: ViewKey union (10 views), setView, productDetailId + openProduct(id) (auto-navigates to 'products') / closeProduct, metaPanelOpen, plus `#view=xxx` deep-link sync (`initUiHashSync()` called from app-root, hashchange-aware, replaceState writes in setView).
+- Rewrote `src/components/app-root.tsx` — auth gate: loading → 📦 boot skeleton, anon → LoginView, authed → AppShell.
+- `src/components/auth/login-view.tsx`: centered split card (md:grid-cols-2). Left emerald→stone gradient brand panel: 📦 StockSense, tagline "Warehouse inventory intelligence — every unit tracked, reserved, and reconciled.", Inbound pipeline chips (Expected→Received→Available) + Outbound (Available→Reserved→Picked→Packed→Delivered) with staggered framer-motion entrance. Right: react-hook-form + zod (zodResolver, z.email) email/password form, spinner submit, error toast mapping (401 → "Invalid email or password", 404 → "API not ready yet…"), 3 demo quick-fill chips (Manager Mia Torres / Staff Dev Patel / Sam Reyes anomaly demo). NO blue/indigo.
+- Shell (`src/components/shell/`):
+  - `app-shell.tsx`: min-h-screen flex-col root, desktop sidebar (sticky w-60) + main column (max-w-7xl) + sticky footer (mt-auto).
+  - `sidebar.tsx`: `Sidebar` (desktop rail) + `SidebarContent` (reused inside mobile Sheet); nav sections Operations/Intelligence from `nav.ts` (10 items w/ lucide icons per contract); active = emerald accent bar + bg-primary/10; bottom user card (initials avatar, role label via ROLE_LABELS, logout icon button w/ tooltip + toast).
+  - `topbar.tsx`: sticky h-14 backdrop-blur, hamburger (mobile) → Sheet(side=left) with same SidebarContent, view title + subtitle, global search, refresh button (invalidates all queries, spins while useIsFetching>0, toast).
+  - `search-command.tsx`: Popover+Command global product search — debounced (250ms) GET /api/search?q=, ⌘K/Ctrl+K toggle, results show sku mono + name + on hand/available + amber "reorder" badge; click → openProduct(id) (→ products view + detail dialog). Two triggers: input-style (sm+) / icon (mobile).
+  - `footer.tsx`: "StockSense · Riverside Distribution Center" + "Demo environment — data reconciles against the immutable ledger", safe-area inset padding.
+  - `page-header.tsx`: SHARED PageHeader component (title/subtitle/icon/actions) — see conventions below.
+  - `nav.ts`: NAV_SECTIONS + NAV_BY_VIEW map (labels, icons, subtitles) — single source of truth for sidebar, topbar.
+- `src/components/views/view-registry.tsx`: maps all 10 ViewKeys → components; `ActiveView` keyed by view (remounts on switch). Nine non-dashboard views point at SELF-CONTAINED stub files (see below) that Task 2 agents replace whole-file — no cross-stub imports, registry never needs edits.
+- Dashboard (`src/components/views/dashboard-view.tsx` + `dashboard/*`): TanStack Query ['dashboard'] → GET /api/dashboard, refetchInterval 30s. Sections: (1) `kpi-cards.tsx` 6 responsive KPI cards (Total Stock Value, Available Value w/ Reserved·Incoming / In-transit·Damaged sub-lines, Open Deliveries, Expected Receipts, Low Stock amber>0, Stockouts red>0) with stagger motion; (2) `attention-panel.tsx` Needs Attention — items sorted red→orange→green, emoji in severity-tinted soft circle, truncated detail, chevron, click → setView(item.href), count badge colored by max severity, empty state "All clear — nothing needs attention 🎉"; (3) `charts-row.tsx` Recharts lg:grid-cols-2 — donut value-by-category (no-blue palette #10b981/#14b8a6/#f59e0b/#78716c/#f43f5e/#84cc16, center total, $ tooltip) + 14-day grouped bar chart (received emerald vs delivered stone, MMM d ticks, $ axes/tooltip); (4) `rack-grid.tsx` floor-plan grid (2/3/4 cols): rackCode, zoneName · locations, onHandValue, emerald gradient fill bar with intensity scaled by fillPct; (5) `activity-list.tsx` recent ledger activity — docType-colored docCode chips (RECEIPT emerald, DELIVERY stone, TRANSFER teal, ADJUSTMENT amber, COUNT amber-dark, OPENING zinc), sku mono, field+location, fmtSignedQty+deltaColor, timeAgo · performedByName, max-h-80 overflow-y-auto, "Full history →" button; `states.tsx` DashboardSkeleton + friendly retry-able DashboardError (401 → session expired + back-to-sign-in, 404 → "API not live yet"); `motion.ts` shared fadeUp/staggerContainer variants.
+- All numbers formatted via '@/lib/format' helpers. Fully responsive; keyboard/ARIA labels throughout.
 
 Stage Summary:
-- Service RUNNING: pid 2565 (`bun --hot index.ts`), listening on *:3003, log at /tmp/market-ticker.log. Do NOT kill it.
-- How to run: `cd mini-services/market-ticker && bun install && (nohup bun run dev > /tmp/market-ticker.log 2>&1 &)`.
-- Verification evidence (client output): SNAPSHOT 46 ticks on connect; TICK #1 t=05:48:02.793Z, TICK #2 t=05:48:04.793Z (exactly 2000ms cadence), sanity PASS ×2, exit 0. Sample: `AAPL p=196.14 c=-2.25% v=30751536 | MSFT p=456.75 c=-0.29% | NVDA p=140.39 c=-0.7%` — symbols/prices/changePct/volume all sensible, and prices jitter between ticks (live feel confirmed).
-- Log shows accurate connection accounting: "Client connected … (connected clients: 1)" → "Client disconnected … (connected clients: 0)".
-- Determinism note: this service imports the SAME engine as the Next.js API via relative path, so prices are IDENTICAL across API + WS at the same wall-clock time.
-- Browser/frontend integration contract: connect with `io('/?XTransformPort=3003')` (Caddy :81 → localhost:3003), events 'snapshot' (on connect) and 'tick' (every 2s), payload { t: number, ticks: { symbol, p, c, v }[] }.
-- `bun run lint` passes (exit 0). No files outside `mini-services/market-ticker/` were created/modified except: main package.json + bun.lock (added socket.io-client, as instructed) and this worklog append. /tmp/ticker-test.ts kept for re-verification (`cd /home/z/my-project && bun /tmp/ticker-test.ts`).
+- STATUS: lint 0 errors ✓ · tsc: 0 errors in my files (api/* errors belong to Task 1-a, in progress) ✓ · GET / 200, title + boot screen verified via curl ✓ · /api/auth/me returns {user:null} (matches contract) ✓.
+- NOTE for main agent: at time of writing POST /api/auth/login returns 500 "Internal error" (Task 1-a's route references db.user but crashes — see dev.log line 22 of their route). Frontend handles it gracefully (error toast). Integration-test login once 1-a lands.
+- STUB FILES THAT TASK 2 AGENTS MUST REPLACE (whole file, keep the exact named export shown):
+  - Task 2-a: `src/components/views/products-view.tsx` (export ProductsView), `src/components/views/receipts-view.tsx` (export ReceiptsView)
+  - Task 2-b: `src/components/views/deliveries-view.tsx` (export DeliveriesView), `src/components/views/transfers-view.tsx` (export TransfersView), `src/components/views/adjustments-view.tsx` (export AdjustmentsView)
+  - Task 2-c: `src/components/views/counts-view.tsx` (export CountsView), `src/components/views/history-view.tsx` (export HistoryView), `src/components/views/alerts-view.tsx` (export AlertsView), `src/components/views/reorder-view.tsx` (export ReorderView)
+- COMPONENT CONVENTIONS for Task 2 agents:
+  - Wrap each view's top level in `<div className="space-y-6">` starting with `<PageHeader title subtitle icon actions>` from '@/components/shell/page-header' (icon = lucide in `bg-primary/10 text-primary` chip — see stubs for exact usage; stubs already import it correctly).
+  - Views render standalone inside the shell's `<main>` (max-w-7xl, px-4 py-5/6) — no extra page wrappers needed.
+  - Stores: `useAuthStore` (user, user.permissions for gating buttons) and `useUIStore` (setView, openProduct for cross-view links, metaPanelOpen).
+  - Query keys so far: ['dashboard'] (30s), ['search', q]. Suggested: ['products', filters], ['receipts', status], etc. Refresh button invalidates ALL queries.
+  - Severity/docType color conventions established in dashboard/activity-list.tsx (DOC_STYLES) — reuse pattern for chips.
+  - Motion variants available at '@/components/views/dashboard/motion' (fadeUp, staggerContainer) — import if you want the same subtle entrance.
+  - Attention item href values produced by the engine: 'reorder', 'adjustments', 'alerts', 'receipts' — all valid ViewKeys, cast `as ViewKey` when calling setView.
 
 ---
 Task ID: 1-a
 Agent: backend-api
-Task: Implemented all 17 Next.js API routes under src/app/api/** per the Task 1-a contract, plus shared portfolio logic (src/lib/portfolio.ts) and server-only LLM/watchlist helpers (src/app/api/_lib/).
+Task: All 29 API endpoint groups under src/app/api/** per the Task 1-a contract (auth, health, meta, products, receipts, deliveries, transfers, adjustments, ledger, counts, reorder, attention + flag review, dashboard, search).
 
 Work Log:
-- Read worklog contract + engine/news/universe/types/db sources; confirmed dev server on :3000 and z-ai-web-dev-sdk types.
-- Created `src/lib/portfolio.ts` — foldTransactions (avg-cost method, CASH_SEED=100000, fee=0.99 only affects cash), computePortfolio (summary/holdings/last-50 txns), computeHistorySeries (daily value via EOD cash cutoffs + getCloseOn, final live point), toTransactionDTO.
-- Created `src/app/api/_lib/llm.ts` — llmComplete() (system prompt as first 'assistant' msg, optional history, thinking disabled) + stripCodeFences/safeJsonParse; `_lib/watchlist.ts` — toWatchItemDTO with computed alertAboveHit/alertBelowHit.
-- Implemented routes: market/overview, stocks (search/sector/sort/order/limit), stocks/[symbol] (+404), stocks/[symbol]/candles (range whitelist, default 1D, +400), news (ensureNews first, publishedAt<=now, symbol filter, limit/offset, symbolName join), news/[id]/ai-summary (POST LLM→strict-JSON {summary,sentiment,impact}, cache in NewsItem.aiSummary, 200+fallback:true on LLM failure, GET cached), watchlist GET/POST + [symbol] PATCH/DELETE, portfolio GET, portfolio/trade POST (BUY cash check, SELL owned-qty check, price=live or provided, returns updated PortfolioDTO), portfolio/transaction/[id] DELETE, portfolio/history (days 1-365 default 30), analysis/[symbol] POST (TTL cache ANALYSIS_TTL_MS, context: quote+fundamentals+1M trend stats+sector+3 headlines, regex parse Rating/Score/Price Target, 503 on LLM failure) + GET (latest or {report:null}), chat POST (save user msg, context block: 3 gainers/3 losers + watchlist + portfolio holdings + mentioned-stock quotes/fundamentals, last-10 history, save+return reply, 503 on failure) + GET (last 50 asc), search, health. All with `export const dynamic = 'force-dynamic'`, `await params` (Next 16 Promise params), and { error } JSON on 400/404/500/503.
-- Fixed 2 bugs found while testing: relative imports of _lib helpers (switched to '@/app/api/_lib/...' alias) and a `sessionId` redeclaration in chat POST.
-- curl-tested every endpoint incl. full portfolio flow (BUY 2 AAPL → GET → invalid SELL 400), LLM endpoints for real (ai-summary ~2s, analysis ~5.5s, chat ~1-2.5s), caching behavior, idempotency of ensureNews (count stable at 54 across calls), and error paths. `bun run lint` passes; `tsc --noEmit` clean for my files.
+- Read worklog + all foundation libs (inventory engine, attention, mappers, auth, http, permissions, types, schema) before writing code.
+- Created `src/app/api/_lib/route-helpers.ts` (private, non-routable): readJson(400 on bad JSON), toNum/toDate coercion, numericParam(404), fetchStockMap (one query → Map `${productId}:${locationId}` for delivery/transfer availableAtLocation/availableAtSource), fetchUserNameMap (createdByName/approvedByName/performedByName), mapSuggestions (ReorderSuggestionDTO with live computeNeeds values + preferred-supplier MOQ/orderMultiple).
+- Created `src/app/api/_lib/attention-compat.ts`: **workaround for a foundation bug** — `src/lib/attention.ts` line 42 references `pendingApprovalAdjustments` (never defined; the Promise.all destructuring names it `pendingAdjustments`), so computeAttention/computeDashboard throw ReferenceError on EVERY call. Since API routes may not modify libs, this file holds identical copies (computeAttentionFixed/computeDashboardFixed) with only that one identifier fixed. **MAIN AGENT: apply the one-word fix in src/lib/attention.ts line 42 (`pendingApprovalAdjustments,` → `pendingAdjustments,`), then the compat file can be deleted and the two routes switched back to `@/lib/attention`.**
+- ENVIRONMENT FIX: the running dev server (started 05:25, BEFORE the new schema was pushed/generated at ~06:39) had a stale Prisma client cached — `db.user` was undefined → all DB-touching routes 500'd. Fixed WITHOUT killing the dev server: `touch next.config.ts` (content unchanged) → `next dev` CLI detected the change and respawned a fresh `next-server` (new PID) which loaded the current generated client. No process needed to be killed/restarted manually.
+- Wrote 35 route files (every one with `export const dynamic = 'force-dynamic'`, Next-16 `await params`, uniform try/catch → HttpError status / 500 'Internal error'): auth login (scrypt verify → createSession → sns_session cookie via sessionCookieOptions) / logout (destroySession + cookie clear, 401-safe) / me; health; meta; products list (search/category/belowReorder/stockout filters + sort/order, summary & categories over the FULL catalogue) + detail + POST (perm configure, SKU-unique 400, first supplier preferred) + PATCH (field update + supplierIds replace); receipts list (status/delayed filters) + create + detail + receive (variance + damagedQty) + cancel; deliveries list + create + detail + pick/pack/deliver/cancel (all via engine in `db.$transaction`, stock map for availableAtLocation); transfers list + create + detail + receive/cancel; adjustments list (status/severity, user-name map) + create (201 + explanation/flagsCreated/severity) + approve/reject (perm approve-adjustment); ledger (docType/productId/locationId/from/to/q filters, q spans code/docCode/sku/reason, limit/offset pagination, distinct docTypes); counts list (adjustmentCodes = adjustments whose reason contains count.code) + create + submit ({count, adjustment|null}) + cancel; reorder GET (refreshSuggestions(db) then all suggestions with needs + MOQ/multiple) + accept (creates real receipt) / dismiss; attention (summary/items/flags/below/stockouts); attention flag review (OPEN→REVIEWED); dashboard (computeDashboardFixed + flags mapped to ExceptionFlagDTO); search (sku/name contains, limit 8, aggregated + belowReorder).
+- Mid-build type fixes: relative `_lib` import paths were off-by-one → switched all 27 to `@/app/api/_lib/route-helpers`; added post-mutation null guards; tsc strict clean for all API files.
+- VERIFICATION (curl, dev server :3000): login wrong password 401, anon 401, bad JSON 400; staff (Dev Patel) 403 on approve-adjustment/configure/approve-reorder/flag-review; delivery qty>available → 400 "…can never be promised twice."; adjustment countedQty −5 → 422 CRITICAL blocked. Full happy-path mutations: receipt create→receive(48 good/2 damaged → onHand 80→126, damaged 2→4, ledger variance reasons); delivery RESERVED→PICKED→PACKED→DELIVERED (pack deducts, reserved released on cancel); transfer A1-S1→A1-S2 create/receive/cancel; adjustments LOW auto-post (201, "Logged automatically…"), MEDIUM flagged (REPEATED_MISMATCH), HIGH held → manager approve posts stock + sets approvedByName, reject leaves stock untouched; count clean submit (adjustment:null) + variance submit (auto-adjustment through severity engine, adjCodes linkage) + cancel; reorder accept → ACCEPTED + RCPT-1008 (CircuitHub 35, expectedAt honored, incoming 35) / dismiss → DISMISSED; flag review → REVIEWED (re-review 400); logout clears cookie.
+- After mutation tests re-ran `bun prisma/seed.ts` (deleteMany-based, re-runnable by design) to restore the pristine snapshot, re-verified every target: products 19 SKUs with Steel Rods onHand=80/reserved=20/available=60; reorder 3 PENDING (Steel 100 kg Metro Steel Co. MOQ 50 ×25 · Carton 1300 BlueRidge · Controller 35 CircuitHub) with the 4-line plan-style reason; attention summary belowReorder=3 · stockouts=1 · pendingApprovalAdjustments=1 · openFlags=5 · delayedReceipts=1 · pendingSuggestions=3 · inTransitTransfers=1 · openCounts=2; adjustments show PENDING_APPROVAL HIGH ADJ-910 (Steel 35→20 by Dev Patel); ledger 88 entries LEDGER-2026-000088…; dashboard kpis+valueByCategory+racks(6)+flows(14)+activity(8)+attention. NOTE: DB sessions were wiped by the re-seed — anyone with an old cookie must log in again.
+- `bun run lint` passes with 0 errors; `bunx tsc --noEmit` clean for all src/app/api files; dev.log tail shows only 200s after the fixes (older TypeErrors/ReferenceError in the log are pre-fix history).
 
 Stage Summary:
-- All 17 contract endpoints live on :3000 and verified: overview, stocks list/detail/candles, news list/ai-summary, watchlist CRUD, portfolio/trade/transaction-delete/history, analysis POST+GET, chat POST+GET, search, health.
-- ensureNews refinement (deliberate, within contract intent): skips a dateKey when the FULL generated set exists (count >= generated length) instead of "any row exists", because the seeder had inserted only today's already-published items — this backfills the rest of the day's slots once; upserts use update:{} so existing rows are never mutated; verified idempotent.
-- Response shapes for frontend agents: /api/portfolio, /api/portfolio/trade and /api/portfolio/transaction/[id] return the PortfolioDTO DIRECTLY ({summary,holdings,transactions}); watchlist items include extra computed alertAboveHit/alertBelowHit booleans; POST /api/news/[id]/ai-summary returns {summary,sentiment,impact} (+cached:true on cache hit, +fallback:true if LLM down); analysis returns {report}; chat returns {reply}; news list/news history/search keep the contract wrappers.
-- Notes: (1) test trade BUY 2 AAPL @ ~196.49 remains as the 9th transaction (per instructed test flow) — portfolio: 7 positions, cash ≈ $45.5K. (2) Cached demo data available: AAPL report (HOLD 6/10, $185-$215) and MSFT report (HOLD 7/10, $440-$480), one news aiSummary (item 27), chat session 'test-session-1' with 2 turns. (3) avgCost/costBasis exclude fees (display convention); fees only reduce cash. (4) LLM sentiment/impact are not persisted on ai-summary cache hits (only summary text stored per contract) — cache hits return the item's stored sentiment/impact.
+- All 29 endpoint groups live and verified (35 route.ts files + `_lib/route-helpers.ts` + `_lib/attention-compat.ts`). DB restored to pristine seeded snapshot; engine invariants intact (no direct StockLevel writes anywhere in routes).
+- Response-shape notes for frontend agents: (1) every create/mutate returns 200 except POST /api/adjustments → 201 with {adjustment, explanation, flagsCreated, severity}. (2) GET /api/products → {products, categories, summary} where summary/categories always describe the full catalogue, not the filtered subset; products count is 19 (the worklog's "20 SKUs" was a miscount — the seed defines exactly 19, verified against the seed source and DB). (3) GET /api/reorder returns ALL suggestions (PENDING + ACCEPTED with receiptCode + DISMISSED), ordered updatedAt desc — filter by status client-side; minOrderQty/orderMultiple are filled from the preferred supplier link. (4) ledger docTypes in seed data = [ADJUSTMENT, DELIVERY, OPENING, RECEIPT, TRANSFER] (no COUNT — the seeded count was clean, so it never posted). (5) deliveries/transfers lists embed availableAtLocation/availableAtSource computed from current stock. (6) counts list ordered by dueDate asc (most urgent/overdue first). (7) POST /api/counts/[id]/submit returns {count, adjustment:{code,severity,status,explanation}|null} — null means "count clean". (8) /api/deliveries/[id]/deliver needs only a signed-in user (no permission). (9) search returns [] for empty q. (10) AttentionItemDTO.href values are app view names ('reorder','adjustments','alerts','receipts').
+- Known deviations: (a) foundation bug in src/lib/attention.ts (line 42) worked around via _lib/attention-compat.ts — one-word fix documented above; (b) worklog snapshot said 20 SKUs, actual seed = 19; (c) `bun prisma/seed.ts` was re-run at the end (restores state, wipes sessions).
+
+---
+Task ID: 2-a
+Agent: frontend-products
+Task: Products + Receipts views
+
+Work Log:
+- Read worklog (project context, seeded snapshot, 2-a contract, 1-b shell conventions), all DTOs in types.ts, api/format libs, both stores, page-header/view-registry, dashboard subcomponents (style reference + DOC_STYLES/motion), shadcn ui inventory, and the live API responses (curl: products/receipts/meta/ledger shapes verified against the 1-a routes).
+- Created shared presentational components in `src/components/shared/` (with barrel `index.ts`): StatusBadge (status→color map for every app status, pulse dot for EXPECTED/IN_TRANSIT/PENDING_APPROVAL, + getProductStatus helper), SeverityBadge (LOW emerald/MEDIUM amber/HIGH red/CRITICAL solid dark red), DocCodeChip + DOC_STYLES (docType-tinted mono chip, same palette as dashboard activity-list), EmptyState (dashed card with optional action — used for empty+error+retry states), QuantityPill (tabular qty, zeros dimmed, tones).
+- Products view (`products-view.tsx` + `products/*`): ['products', search, category] query (debounced search input 300ms, category Select) 30s refetch; summary strip (SKUs/Total Stock Value fmtUSDCompact/Below reorder amber/Stockouts red — from response.summary = full catalogue); "Below reorder"/"Stockout risk" Toggle chips filter client-side on DTO flags (instant, no refetch); 11-col shadcn Table in overflow-x-auto card — SKU mono+name, category chip, fmtUSD 2dp unit cost, On-hand/Reserved/**Available (bold, accent)**/Incoming (amber when >0)/In transit/Damaged (red when >0)/Reorder pt./StatusBadge; rows keyboard-focusable (Enter/Space) → ProductDetailDialog via ui-store productDetailId (so ⌘K global search opens it from any view); "New Product" gated on 'configure'.
+- ProductDetailDialog: ['products','detail',id] + ['ledger','product',id]; max-w-3xl scrollable; header SKU/name/chips/status; hero emerald Available card ("on-hand − reserved — what can be promised") + 5 qty tiles; reorder profile (reorder point with formula caption from preferred supplier lead time, projected available = onHand+incoming−reserved, colored ratio bar vs reorder point, safety/reorder footnotes); stock-by-location table; supplier list (preferred star, lead days, cost, MOQ, ×multiple, reliability %); compact recent ledger (DocCodeChip + field + fmtSignedQty/deltaColor + timeAgo) + "Full move history" → history view.
+- NewProductDialog: RHF+zod (sku/name/category/unit Select from list categories/unitCost/reorderPoint/dailyUsage/safetyStock numeric with NaN-safe controlled inputs, valueClass Select with ABC hints, notes, optional preferred supplier from ['meta']) → POST /api/products → toast → invalidate products/meta/dashboard/search. Uses zod v4 `{ error: '…' }` number messages.
+- Receipts view (`receipts-view.tsx` + `receipts/*`): ['receipts'] 20s refetch; Tabs All/Expected/Received/Cancelled with live counts + "Delayed only" red toggle (client-side on status+daysLate); responsive card grid — DocCodeChip, StatusBadge (EXPECTED amber + pulse-dot), "4d late" red badge, supplier, expected date (+timeUntilStr when upcoming), received date, first-2-SKU preview + "+n more", note; "New Receipt" gated on 'receive'.
+- ReceiptDetailDialog: live receipt prop from query cache (dialog auto-updates after mutations); lines table with colored variance; inline receive form for EXPECTED + 'receive' perm (per-line receivedQty prefilled=expectedQty, damagedQty, note; client-side validation incl. damaged ≤ received) → POST /api/receipts/[id]/receive → toast "Receipt RCPT-xxxx received — stock is now available" → invalidate receipts/products/dashboard/ledger/meta/attention; "Cancel receipt" AlertDialog (destructive) → POST cancel → toast → invalidate; permission-missing hint otherwise.
+- NewReceiptDialog: RHF+zod useFieldArray (≥1 line); product Select grouped by category (SKU + name + unit), location Select grouped by zone ("Rack A1 · Shelf S2"), expectedAt date default +3 days, supplier Select optional, amber explainer ("Creating an expectation raises incoming — stock shows as available only once received"), per-line "currently on-hand/available — incoming adds on top" hint → POST /api/receipts → toast with new code → invalidate. NOTE for 2-b/2-c: used useWatch (not form.watch) to satisfy the react-compiler incompatible-library lint rule.
+- Fixed a react-hooks set-state lint warning by switching form.watch → useWatch; converted RHF numeric inputs to NaN-safe controlled pattern.
+
+Stage Summary:
+- Files: src/components/views/{products-view,receipts-view}.tsx (stubs replaced, named exports kept) + views/products/{product-detail-dialog,new-product-dialog}.tsx + views/receipts/{receipt-card,receipt-detail-dialog,new-receipt-dialog}.tsx + src/components/shared/{status-badge,severity-badge,doc-code-chip,empty-state,quantity-pill,index}.tsx.
+- Shared components for 2-b/2-c: StatusBadge/getProductStatus, SeverityBadge, DocCodeChip/DOC_STYLES, EmptyState, QuantityPill — import from '@/components/shared'. Query keys in use: ['products',search,category], ['products','detail',id], ['receipts'], ['meta'], ['ledger','product',id]; after any stock mutation invalidate receipts/products/dashboard/ledger/meta/attention (prefix ['products'] catches detail queries).
+- Verification: bun run lint 0 errors/0 warnings ✓ · bunx tsc --noEmit 0 errors in my files ✓ · dev.log clean ✓ · agent-browser end-to-end (isolated session): login → Products table (19 SKUs) → Steel Rods detail (60/75 projected, 80% bar, supplier, ledger) → Receipts tabs/counts/delayed badge → New Receipt created RCPT-1007 (grouped selects, add/remove lines, live hints) → received 23 good + 2 damaged → exact success toast + dialog live-updated to RECEIVED with −2 variance (API re-checked: goggles 149 onHand/2 damaged per engine semantics good = received − damaged) → zero console/page errors.
+- ⚠️ Re-seeded DB afterwards to restore the pristine snapshot (verified: 6 receipts RCPT-1001..1006, goggles 128/0, 88 ledger entries, delayed receipt back). Sessions were wiped by the re-seed — if you see 401s, log in again.
+
+---
+Task ID: 2-b
+Agent: frontend-flows (record appended by main — agent completed files but timed out before logging)
+Task: Deliveries + Transfers + Adjustments views
+
+Work Log:
+- Replaced stubs with full views: deliveries-view.tsx (107 lines + 4 subcomponents in deliveries/), transfers-view.tsx (105 + 4), adjustments-view.tsx (138 + 4 in adjustments/: adjustment-detail, adjustment-rows, bits, new-adjustment-dialog).
+- Deliveries: status tabs, state-pipeline stepper (Reserved→Picked→Packed→Delivered), action buttons gated by status+permission with AlertDialog confirms, new-delivery dialog with per-location availability hints.
+- Transfers: from→to path rows, receive/cancel actions, new-transfer with source availability validation.
+- Adjustments: tabs + severity filter, SeverityBadge, pending-approval approve/reject with confirm dialogs, new-adjustment with live system qty display; POST response explanation surfaced in toast.
+- Files verified post-timeout by main: all named exports present, lint+tsc clean, renders verified via agent-browser (DEL-2002..2007, TRF-501/502, ADJ-901..911 all visible; ADJ-910 approve flow tested E2E — toast + POSTED status + ledger update confirmed).
+
+Stage Summary:
+- All three flow views fully functional and browser-verified. No open issues.
+
+---
+Task ID: 2-c
+Agent: frontend-intelligence (record appended by main — agent completed files but timed out before logging)
+Task: Move History + Cycle Counts + Alerts & Review + Reorder views
+
+Work Log:
+- Replaced stubs: history-view.tsx (462 lines + history/), counts-view.tsx (137 + counts/), alerts-view.tsx (190 + alerts/: attention-list, flag-card), reorder-view.tsx (109 + reorder/).
+- History: immutable-ledger banner, docType/search/date filters, 25-per-page pagination, expandable rows, sticky header in scroll container.
+- Counts: cadence chips (WEEKLY/MONTHLY/QUARTERLY), overdue badges, submit-count dialog with per-line counted inputs, variance → auto-adjustment toast (severity + explanation).
+- Alerts: review-flag cards with Mark reviewed (perm approve-adjustment), Needs Attention list with navigation, summary chips.
+- Reorder: explainer header, PENDING suggestion cards with full 4-line plan-style reason blocks (whitespace-pre-line mono), stat chips + progress bar, Accept → creates receipt (AlertDialog), Dismiss, decision history section, all-products reorder status table.
+- Files verified post-timeout by main: lint+tsc clean; browser-verified: reorder reason block for Steel Rods rendered perfectly and RECOMPUTED LIVE after an approval changed stock (65 kg on-hand → suggested 125 kg); Accept flow created RCPT-1007 E2E; alerts Mark-reviewed buttons present.
+
+Stage Summary:
+- All four intelligence views fully functional and browser-verified. No open issues.
+
+---
+Task ID: 3
+Agent: main (Z.ai Code)
+Task: Integration, QA, fixes, final state
+
+Work Log:
+- Completed Task 1-a verification on behalf of the timed-out backend agent: all 35 routes curl-tested (login/me/health/meta/products×4/receipts×5/deliveries×6/transfers×5/adjustments×5/ledger/counts×4/reorder×3/attention+review/dashboard/search). All match DTO contract.
+- Fixed 3 bugs found during QA: (1) CycleCountLine.locationId missing from schema — PRODUCT-scope counts applied every line to one location; added per-line locationId + engine createCount/submitCount changes; required dev-server RESTART because the running process held the pre-push Prisma client (stale client silently dropped the new column). (2) reorder/[id]/accept rejected empty POST bodies → now tolerates. (3) attention.ts pendingApprovalAdjustments type error.
+- Re-seeded and re-verified after each fix; final state: 88 ledger entries, 3 PENDING suggestions (RM-STL-ROD10→100kg Metro Steel, EL-CTL-CX2→35, PK-CRT-4030→1300), 1 PENDING_APPROVAL adjustment, 5 open flags, 1 delayed receipt, attention summary {belowReorder:3, stockouts:1, pendingApprovalAdjustments:1, openFlags:5, delayedReceipts:1, pendingSuggestions:3, inTransitTransfers:1, openCounts:2}.
+- agent-browser E2E: login (quick-fill chip → form → dashboard), all 10 views visited, product detail dialog (Steel Rods: quantity cards, reorder profile, stock-by-location, ledger), delayed receipt detail (receive form prefilled), ADJ-910 approve E2E (toast + POSTED + explanation), reorder accept E2E (receipt RCPT-1007 created + decision history), alerts Mark-reviewed buttons. ZERO console errors / page errors across the whole session.
+- Fixed 3 mobile-overflow bugs (390px viewport): dashboard attention-panel li + alerts attention-list li needed min-w-0 (CSS grid min-width:auto trap); receipts TabsList needed flex-wrap sm:flex-nowrap. All 10 views re-verified overflow-free on mobile.
+- Sticky footer verified: atViewportBottom:true, noGapBelow:true at scroll end. Stale-session handling verified (re-seed wipes sessions → app gracefully returns to login).
+- Final: bun run lint 0 errors · tsc --noEmit clean for app code · dev.log clean.
+
+Stage Summary:
+- StockSense (warehouse inventory management per the Implementation Plan) is COMPLETE and browser-verified end-to-end: Phases 0/1 (engine, split quantities, atomic ops, ledger, permissions, all core modules) + Phase 3 (supplier-aware explainable reorder) + Phase 4 (severity-ranked exceptions, cycle counts, Needs Attention panel) all live on seeded, reconcilable demo data.
+- IMPORTANT OPERATIONAL NOTE: after any `bun run db:push` (schema change), the dev server on :3000 MUST be restarted to pick up the regenerated Prisma client (stale client = silent column drops). Restart: kill next-server pid, then `cd /home/z/my-project && (nohup bun run dev > /dev/null 2>&1 &)`.
+- Demo credentials: manager@stocksense.app/Manager123! (all perms) · staff@stocksense.app/Staff123! (ops) · sam@stocksense.app/Staff123! (anomaly demo).
+- Re-seed anytime: `bun prisma/seed.ts` (wipes + rebuilds the full 20-day story; sessions are cleared too).

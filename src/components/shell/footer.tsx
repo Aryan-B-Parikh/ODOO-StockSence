@@ -1,29 +1,16 @@
 'use client'
 
-import { useMarketStore } from '@/stores/market-store'
-
-/** Sticky footer with disclaimer + connection status. */
+/**
+ * Sticky footer — sits at the viewport bottom on short pages (root is
+ * min-h-screen flex-col + this element carries mt-auto) and is pushed down
+ * naturally when content overflows. Respects mobile safe-area insets.
+ */
 export function AppFooter() {
-  const connected = useMarketStore((s) => s.connected)
-  const tickCount = useMarketStore((s) => s.tickCount)
   return (
-    <footer className="mt-auto border-t bg-background/60">
-      <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-4 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-        <p>
-          <span className="font-semibold text-foreground/70">StockSense</span> — AI-powered market
-          intelligence demo. All market data is <span className="font-medium">simulated</span> and
-          AI content is generated; nothing here is financial advice.
-        </p>
-        <p className="flex items-center gap-3">
-          <span className="tabular">{tickCount.toLocaleString()} ticks received</span>
-          <span className="flex items-center gap-1.5">
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-500 pulse-dot' : 'bg-red-500'}`}
-              aria-hidden
-            />
-            {connected ? 'Streaming' : 'Reconnecting…'}
-          </span>
-        </p>
+    <footer className="mt-auto border-t bg-card/60">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-center gap-1 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-[11px] text-muted-foreground sm:flex-row sm:justify-between md:px-6">
+        <span>StockSense · Riverside Distribution Center</span>
+        <span>Demo environment — data reconciles against the immutable ledger</span>
       </div>
     </footer>
   )

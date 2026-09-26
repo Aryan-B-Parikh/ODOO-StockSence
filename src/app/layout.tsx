@@ -14,16 +14,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StockSense — AI Market Intelligence",
+  title: "StockSense — Warehouse Inventory Intelligence",
   description:
-    "StockSense is an AI-powered stock market intelligence platform: live simulated market data, AI stock analysis, news sentiment, paper portfolio tracking and an AI analyst chat.",
-  keywords: ["stocks", "market", "AI", "portfolio", "analysis", "finance"],
+    "StockSense is a warehouse inventory management system: every unit tracked, reserved, and reconciled across receipts, deliveries, transfers, cycle counts, adjustments and an immutable movement ledger.",
+  keywords: [
+    "warehouse",
+    "inventory",
+    "inventory management",
+    "stock control",
+    "cycle counts",
+    "reorder",
+    "logistics",
+  ],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
   openGraph: {
-    title: "StockSense — AI Market Intelligence",
-    description: "Live simulated markets, AI analysis, news sentiment and paper trading.",
+    title: "StockSense — Warehouse Inventory Intelligence",
+    description:
+      "Every unit tracked, reserved, and reconciled — receipts, deliveries, transfers, cycle counts and an immutable ledger.",
     siteName: "StockSense",
     type: "website",
   },
