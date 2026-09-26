@@ -12,6 +12,7 @@ import { ActivityList } from './dashboard/activity-list'
 import { AttentionPanel } from './dashboard/attention-panel'
 import { ChartsRow } from './dashboard/charts-row'
 import { KpiCards } from './dashboard/kpi-cards'
+import { MetricsPanel } from './dashboard/metrics-panel'
 import { RackGrid } from './dashboard/rack-grid'
 import { DashboardError, DashboardSkeleton } from './dashboard/states'
 
@@ -52,6 +53,7 @@ export function DashboardView() {
           <KpiCards kpis={query.data.kpis} />
           <AttentionPanel attention={query.data.attention} />
           <ChartsRow valueByCategory={query.data.valueByCategory} flows={query.data.flows} />
+          <MetricsPanel metrics={query.data.metrics} />
           <RackGrid racks={query.data.racks} />
           <ActivityList activity={query.data.activity} />
         </>

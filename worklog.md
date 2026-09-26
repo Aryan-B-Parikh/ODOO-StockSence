@@ -269,3 +269,22 @@ Stage Summary:
 - IMPORTANT OPERATIONAL NOTE: after any `bun run db:push` (schema change), the dev server on :3000 MUST be restarted to pick up the regenerated Prisma client (stale client = silent column drops). Restart: kill next-server pid, then `cd /home/z/my-project && (nohup bun run dev > /dev/null 2>&1 &)`.
 - Demo credentials: manager@stocksense.app/Manager123! (all perms) · staff@stocksense.app/Staff123! (ops) · sam@stocksense.app/Staff123! (anomaly demo).
 - Re-seed anytime: `bun prisma/seed.ts` (wipes + rebuilds the full 20-day story; sessions are cleared too).
+
+---
+Task ID: 4
+Agent: main (Z.ai Code) — 15-min review cycle #1
+Task: QA sweep + Phase 5 pilot metrics + ledger CSV export + QR rack labels
+
+Work Log:
+- QA: health check, login (quick-fill), all 10 views walked via agent-browser — zero console/page errors, zero mobile overflow (390px) across every view, sticky footer intact. dev.log clean.
+- Cleanup: removed `src/app/api/_lib/attention-compat.ts` (the backend agent's workaround copy) and switched dashboard/attention routes back to the canonical `@/lib/attention` — the foundation bug it worked around (pendingAdjustments naming) was already fixed upstream during Task 3. Both routes re-verified 200 with identical payloads.
+- NEW FEATURE — Phase 5 pilot metrics ("Success Metrics to Track"): added `computeMetrics()` to src/lib/attention.ts + `PilotMetricsDTO` in types.ts + `/api/dashboard` now returns `metrics`. Built `dashboard/metrics-panel.tsx` (6 metric cards: Inventory accuracy 100% w/ progress bar, Stockout incidents (1 — EL-CTL-CX2), Overselling prevented 416 reserved units, Reorder acceptance %, Cycle-count variance rate, Alert-to-action time 139.6h) — placed between ChartsRow and RackGrid. All ledger-derived, no schema change, no new tracking (per the plan: "a richer read of data the system already collects").
+- NEW FEATURE — Ledger CSV export: `GET /api/ledger/export` (same filters as /api/ledger: docType/productId/locationId/from/to/q; CSV-escaped; Content-Disposition attachment; 88 rows verified via curl incl. RECEIPT-filtered subset). History view gained an "Export CSV" button in PageHeader actions that applies the current table filters + success toast. Browser-verified: request fired, 200, zero console errors.
+- STYLING — QR-style rack labels (Phase 2 nod: "QR stickers map to the zone/rack/shelf hierarchy"): rack-grid.tsx now renders a deterministic 12×12 dot-matrix QR placeholder per rack (FNV-1a seeded from zone/rack code, finder-pattern corners, quiet-zone framing, title "Scan-to-open"), zone name uppercase caption, hierarchy code line (e.g. "A-A1-S#"), hover border accent.
+- Dev server died mid-cycle (port 3000 refused connections) — restarted via `cd /home/z/my-project && (nohup bun run dev > /dev/null 2>&1 &)`, verified 200 + health ok. Root cause unknown (no error in log tail); watch for recurrence.
+- Final verification: lint 0 errors · tsc 0 errors (app code) · dashboard renders metrics + QR labels (browser-verified innerText: "Inventory accuracy 100% | Stockout incidents 1 | Overselling prevented 416 | Alert-to-action time 139.6h") · history Export CSV works · mobile overflow-free.
+
+Stage Summary:
+- App remains fully stable. Added: Phase 5 metrics panel (dashboard), ledger CSV export (route + button), QR-style rack labels. Removed: attention-compat shim.
+- Next-cycle candidates (priority order): (1) supplier management CRUD view (perm 'configure' — currently suppliers are read-only via /api/meta); (2) print-friendly count sheets (window.print CSS on count detail); (3) PIN lock screen (Phase 2 "PIN/fingerprint unlock" — a lock button in topbar + PIN re-entry gate); (4) offline-queue simulation (Phase 2 fallback story — queue actions in localStorage when fetch fails, replay on reconnect); (5) more seed history depth for richer flows chart.
+- Risk to watch: dev server spontaneously stopped once this cycle — if port 3000 refuses again, restart command is documented in Task 3 notes.

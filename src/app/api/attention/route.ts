@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireUser } from '@/lib/auth'
-import { computeAttentionFixed } from '@/app/api/_lib/attention-compat'
+import { computeAttention } from '@/lib/attention'
 import { db } from '@/lib/db'
 import { HttpError } from '@/lib/http'
 import type { ExceptionFlagDTO } from '@/lib/types'
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     await requireUser()
-    const data = await computeAttentionFixed(db)
+    const data = await computeAttention(db)
     const flags: ExceptionFlagDTO[] = data.flags.map((f) => ({
       id: f.id,
       type: f.type,

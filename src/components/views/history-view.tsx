@@ -6,12 +6,14 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Download,
   Info,
   RotateCcw,
   ScrollText,
   Search,
   X,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useEffect, useMemo, useState } from 'react'
 
 import { PageHeader } from '@/components/shell/page-header'
@@ -120,15 +122,41 @@ export function HistoryView() {
         subtitle="Immutable ledger of every quantity change — nothing is ever edited or deleted"
         icon={<ScrollText className="size-5" />}
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void query.refetch()}
-            disabled={query.isFetching}
-          >
-            <RotateCcw className={cn('size-3.5', query.isFetching && 'animate-spin')} aria-hidden="true" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const params = new URLSearchParams()
+                if (docType && docType !== 'ALL') params.set('docType', docType)
+                if (q.trim()) params.set('q', q.trim())
+                if (from) params.set('from', from)
+                if (to) params.set('to', to)
+                const url = `/api/ledger/export${params.size > 0 ? `?${params.toString()}` : ''}`
+                const a = document.createElement('a')
+                a.href = url
+                a.rel = 'noopener'
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                toast.success(`Exporting ${query.data?.total ?? 'all'} ledger entries as CSV`, {
+                  description: 'Same filters as the table are applied to the export.',
+                })
+              }}
+            >
+              <Download className="size-3.5" aria-hidden="true" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void query.refetch()}
+              disabled={query.isFetching}
+            >
+              <RotateCcw className={cn('size-3.5', query.isFetching && 'animate-spin')} aria-hidden="true" />
+              Refresh
+            </Button>
+          </div>
         }
       />
 

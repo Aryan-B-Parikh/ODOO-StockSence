@@ -367,6 +367,19 @@ export interface DashboardDTO {
   flows: { date: string; received: number; delivered: number }[]
   activity: LedgerEntryDTO[]
   attention: AttentionDTO
+  metrics: PilotMetricsDTO
+}
+
+// ---------- Phase 5 pilot metrics (ledger-derived) ----------
+
+export interface PilotMetricsDTO {
+  inventoryAccuracy: { pct: number; countedLines: number; varianceLines: number; label: string }
+  stockoutIncidents: { current: number; skus: string[]; label: string }
+  oversellingPrevented: { blockedAttempts: number; label: string }
+  reorderAcceptance: { accepted: number; dismissed: number; pct: number; label: string }
+  cycleVarianceRate: { counts: number; withVariance: number; pct: number; label: string }
+  flagReviewTime: { openFlags: number; avgHoursOpen: number | null; label: string }
+  alertToAction: { avgHours: number | null; sampled: number; label: string }
 }
 
 // ---------- Meta (for forms) ----------

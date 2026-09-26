@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireUser } from '@/lib/auth'
-import { computeDashboardFixed } from '@/app/api/_lib/attention-compat'
+import { computeDashboard } from '@/lib/attention'
 import { db } from '@/lib/db'
 import { HttpError } from '@/lib/http'
 import type { ExceptionFlagDTO } from '@/lib/types'
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     await requireUser()
-    const data = await computeDashboardFixed(db)
+    const data = await computeDashboard(db)
     // Map attention.flags rows to ExceptionFlagDTO (the rest already matches DashboardDTO).
     const flags: ExceptionFlagDTO[] = data.attention.flags.map((f) => ({
       id: f.id,
