@@ -24,6 +24,13 @@ const SEVERITY_CIRCLE: Record<string, string> = {
   green: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
 }
 
+/** Severity-tinted left rail + hover wash for attention items. */
+const SEVERITY_RAIL: Record<string, string> = {
+  red: 'before:bg-red-500/70 hover:border-red-500/30 hover:bg-red-500/[0.04] dark:hover:bg-red-500/[0.06]',
+  orange: 'before:bg-orange-500/70 hover:border-orange-500/30 hover:bg-orange-500/[0.04] dark:hover:bg-orange-500/[0.06]',
+  green: 'before:bg-emerald-500/70 hover:border-emerald-500/30 hover:bg-emerald-500/[0.04] dark:hover:bg-emerald-500/[0.06]',
+}
+
 /** Phase 4 action list — severity-ranked items, each links to its view. */
 export function AttentionPanel({ attention }: { attention: AttentionDTO }) {
   const setView = useUIStore((s) => s.setView)
@@ -68,7 +75,10 @@ export function AttentionPanel({ attention }: { attention: AttentionDTO }) {
                   <button
                     type="button"
                     onClick={() => setView(item.href as ViewKey)}
-                    className="group flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/50"
+                    className={cn(
+                      'group relative flex w-full items-start gap-3 overflow-hidden rounded-lg border bg-card p-3 pl-4 text-left transition-all before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-full before:content-[""] hover:shadow-sm',
+                      SEVERITY_RAIL[item.severity] ?? SEVERITY_RAIL.green
+                    )}
                   >
                     <span
                       aria-hidden="true"

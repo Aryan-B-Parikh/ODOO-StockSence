@@ -88,11 +88,13 @@ export function RackGrid({ racks }: { racks: DashboardDTO['racks'] }) {
                 <motion.div
                   key={`${rack.zoneName}-${rack.rackCode}`}
                   variants={fadeUp}
-                  className="group rounded-lg border bg-card p-3 transition-colors hover:border-primary/40"
+                  className="lift group rounded-lg border bg-card p-3 hover:border-primary/40"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <QrSticker seed={`${rack.zoneName}/${rack.rackCode}`} />
+                      <span className="transition-transform duration-200 group-hover:scale-110">
+                        <QrSticker seed={`${rack.zoneName}/${rack.rackCode}`} />
+                      </span>
                       <div className="min-w-0">
                         <span className="block text-lg font-semibold leading-none tracking-tight">{rack.rackCode}</span>
                         <span className="mt-1 block truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { CalendarClock, CheckCircle2, MapPin, Package, ScanLine } from 'lucide-react'
+import { CalendarClock, CheckCircle2, MapPin, Package, Printer, ScanLine } from 'lucide-react'
 
 import { fadeUp } from '@/components/views/dashboard/motion'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { deltaColor, fmtDate, fmtSignedQty, timeAgo } from '@/lib/format'
 import type { CycleCountDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
+
+import { useCountSheetPrint } from './count-sheet-print'
 
 /** cadence → chip color (mirrors value class: HIGH weekly / MEDIUM monthly / LOW quarterly). */
 const CADENCE_STYLES: Record<string, string> = {
@@ -32,6 +34,7 @@ export function CountCard({
   const isCompleted = count.status === 'COMPLETED'
   const isCancelled = count.status === 'CANCELLED'
   const isClean = isCompleted && (count.totalVariance ?? 0) === 0
+  const sheetPrint = useCountSheetPrint()
 
   return (
     <motion.div variants={fadeUp}>
@@ -126,16 +129,31 @@ export function CountCard({
           )}
 
           {count.status === 'OPEN' && canCount && (
-            <Button size="sm" className="w-full" onClick={onOpen}>
-              <ScanLine className="size-3.5" aria-hidden="true" />
-              Start count
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={() => void sheetPrint.print(count)}
+                disabled={sheetPrint.printing}
+                aria-label={`Print paper tally sheet for ${count.code}`}
+              >
+                <Printer className="size-3.5" aria-hidden="true" />
+                Print sheet
+              </Button>
+              <Button size="sm" className="flex-1" onClick={onOpen}>
+                <ScanLine className="size-3.5" aria-hidden="true" />
+                Start count
+              </Button>
+            </div>
           )}
           {count.status === 'OPEN' && !canCount && (
             <p className="text-[11px] text-muted-foreground">Requires the “count” permission to perform.</p>
           )}
         </CardContent>
       </Card>
+      {/* Print sheet portal — lives on document.body */}
+      {sheetPrint.portal}
     </motion.div>
   )
 }

@@ -1,25 +1,32 @@
 'use client'
 
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { Menu, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { LockKeyhole, Menu, RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { useLockStore } from '@/stores/lock-store'
 import { useUIStore } from '@/stores/ui-store'
 
 import { NAV_BY_VIEW } from './nav'
+import { SetPinDialog } from './pin-lock'
 import { SearchCommand } from './search-command'
 import { SidebarContent } from './sidebar'
 
-/** Sticky application topbar — view title, global search, refresh, mobile nav. */
+/** Sticky application topbar — view title, global search, refresh, kiosk lock, mobile nav. */
 export function Topbar() {
   const view = useUIStore((s) => s.view)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [setPinOpen, setSetPinOpen] = useState(false)
   const queryClient = useQueryClient()
   const fetchingCount = useIsFetching()
+
+  const hasPin = useLockStore((s) => s.hasPin)
+  const lock = useLockStore((s) => s.lock)
 
   const meta = NAV_BY_VIEW[view]
 
@@ -27,6 +34,25 @@ export function Topbar() {
     await queryClient.invalidateQueries()
     toast.success('Data refreshed')
   }
+
+  /** Lock now when a PIN exists, otherwise walk through the Set-PIN dialog first. */
+  const lockScreen = useCallback(() => {
+    if (hasPin) lock()
+    else setSetPinOpen(true)
+  }, [hasPin, lock])
+
+  // Ctrl/Cmd+L locks the kiosk. preventDefault overrides the browser address-bar
+  // shortcut while focus is inside the document (fine for the demo tablet).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        lockScreen()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [lockScreen])
 
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background/85 px-3 backdrop-blur md:px-4">
@@ -49,6 +75,23 @@ export function Topbar() {
 
       <SearchCommand />
 
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9 shrink-0"
+              onClick={lockScreen}
+              aria-label="Lock screen (kiosk mode)"
+            >
+              <LockKeyhole className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Lock screen (kiosk mode) — Ctrl+L</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
       <Button
         variant="outline"
         size="icon"
@@ -58,6 +101,9 @@ export function Topbar() {
       >
         <RefreshCw className={cn('size-4', fetchingCount > 0 && 'animate-spin')} />
       </Button>
+
+      {/* First-time flow: set a PIN, then the screen locks */}
+      <SetPinDialog open={setPinOpen} onOpenChange={setSetPinOpen} onPinSet={lock} />
 
       {/* Mobile navigation */}
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>

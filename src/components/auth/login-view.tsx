@@ -123,15 +123,28 @@ export function LoginView() {
         className="relative grid w-full max-w-4xl overflow-hidden rounded-2xl border bg-card shadow-xl md:grid-cols-[1.05fr_1fr]"
       >
         {/* ── Brand panel ─────────────────────────────────────────── */}
-        <div className="relative hidden flex-col justify-between gap-8 bg-gradient-to-br from-emerald-950 via-emerald-900 to-stone-900 p-8 text-emerald-50 md:flex">
+        <div className="relative hidden flex-col justify-between gap-8 overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-900 to-stone-900 p-8 text-emerald-50 md:flex">
+          {/* engineering-grid backdrop + emerald washes */}
+          <div
+            aria-hidden="true"
+            className="bg-grid pointer-events-none absolute inset-0 text-emerald-100 [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_85%)]"
+          />
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-emerald-400/10 blur-2xl"
           />
-          <div>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -bottom-24 -left-20 size-72 rounded-full bg-teal-400/10 blur-3xl"
+          />
+          <div className="relative">
             <div className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-white/10 text-xl ring-1 ring-inset ring-white/15">
-                📦
+              <span className="relative flex size-10 items-center justify-center rounded-xl bg-white/10 text-xl ring-1 ring-inset ring-white/15">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 rounded-xl bg-emerald-300/20 blur-md"
+                />
+                <span className="relative">📦</span>
               </span>
               <div className="leading-tight">
                 <div className="text-lg font-semibold tracking-tight">StockSense</div>
@@ -187,6 +200,17 @@ export function LoginView() {
               <span>Split quantities per location</span>
               <span aria-hidden="true">·</span>
               <span>Permissioned actions</span>
+            </motion.div>
+            <motion.div
+              variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="flex items-center gap-2 rounded-lg border border-emerald-300/15 bg-emerald-300/5 px-3 py-2 text-[11px] text-emerald-100/70"
+            >
+              <span className="relative flex size-1.5" aria-hidden="true">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-300 opacity-60" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-emerald-300" />
+              </span>
+              Live demo environment — Riverside Distribution Center, WH1
             </motion.div>
           </motion.div>
         </div>
@@ -266,14 +290,22 @@ export function LoginView() {
                   key={account.email}
                   type="button"
                   onClick={() => fillDemo(account.email, account.password)}
-                  className="flex items-center gap-2.5 rounded-lg border bg-background/60 px-3 py-2 text-left text-sm transition-colors hover:border-primary/40 hover:bg-accent"
+                  className="group flex items-center gap-2.5 rounded-lg border bg-background/60 px-3 py-2 text-left text-sm transition-all hover:border-primary/40 hover:bg-accent hover:shadow-sm"
                 >
-                  <account.icon className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                    <account.icon className="size-3.5" aria-hidden="true" />
+                  </span>
                   <span className="min-w-0 flex-1 leading-tight">
                     <span className="block truncate font-medium">{account.label}</span>
                     <span className="block truncate text-[11px] text-muted-foreground">
                       {account.email} · {account.hint}
                     </span>
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    Fill
                   </span>
                 </button>
               ))}

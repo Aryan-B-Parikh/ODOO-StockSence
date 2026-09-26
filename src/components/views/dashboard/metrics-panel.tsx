@@ -104,7 +104,7 @@ export function MetricsPanel({ metrics }: { metrics: Metrics }) {
               const Icon = item.icon
               return (
                 <motion.div key={item.key} variants={fadeUp} className="min-w-0">
-                  <div className="flex h-full flex-col gap-2 rounded-lg border bg-card p-3.5">
+                  <div className="lift flex h-full flex-col gap-2 rounded-lg border bg-card p-3.5 hover:border-primary/30">
                     <div className="flex items-center gap-2">
                       <span
                         className={

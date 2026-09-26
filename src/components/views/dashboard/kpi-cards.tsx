@@ -19,15 +19,36 @@ interface KpiCardProps {
   icon: React.ReactNode
   iconClass: string
   valueClass?: string
+  /** Tone drives the top accent line + hover ring. */
+  tone?: 'emerald' | 'teal' | 'amber' | 'red'
 }
 
-function KpiCard({ label, value, sub, icon, iconClass, valueClass }: KpiCardProps) {
+const TONE_ACCENT: Record<string, string> = {
+  emerald: 'from-emerald-500/60',
+  teal: 'from-teal-500/60',
+  amber: 'from-amber-500/60',
+  red: 'from-red-500/60',
+}
+
+function KpiCard({ label, value, sub, icon, iconClass, valueClass, tone = 'emerald' }: KpiCardProps) {
   return (
-    <Card className="gap-0 py-0">
+    <Card className="lift gap-0 overflow-hidden py-0 hover:border-primary/30">
+      {/* tone accent line */}
+      <span
+        aria-hidden="true"
+        className={cn('block h-[3px] w-full bg-gradient-to-r to-transparent', TONE_ACCENT[tone])}
+      />
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-xs font-medium text-muted-foreground">{label}</span>
-          <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-md', iconClass)}>{icon}</span>
+          <span
+            className={cn(
+              'flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset ring-current/10',
+              iconClass
+            )}
+          >
+            {icon}
+          </span>
         </div>
         <div className={cn('mt-2 text-2xl font-semibold tracking-tight tabular', valueClass)}>{value}</div>
         {sub && <div className="mt-1 space-y-0.5 text-[11px] leading-tight text-muted-foreground">{sub}</div>}
@@ -56,6 +77,7 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           sub={<span>{kpis.skuCount} active SKUs</span>}
           icon={<Package className="size-3.5" />}
           iconClass="bg-emerald-500/10 text-emerald-600"
+          tone="emerald"
         />
       </motion.div>
 
@@ -71,6 +93,7 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           }
           icon={<CircleCheck className="size-3.5" />}
           iconClass="bg-teal-500/10 text-teal-600"
+          tone="teal"
         />
       </motion.div>
 
@@ -86,6 +109,7 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           }
           icon={<ClipboardCheck className="size-3.5" />}
           iconClass="bg-teal-500/10 text-teal-600"
+          tone="teal"
         />
       </motion.div>
 
@@ -96,6 +120,7 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           sub={<span>{kpis.pendingAdjustments} adjustments pending approval</span>}
           icon={<Truck className="size-3.5" />}
           iconClass="bg-amber-500/10 text-amber-600"
+          tone="amber"
         />
       </motion.div>
 
@@ -109,6 +134,7 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           iconClass={
             lowStock ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600'
           }
+          tone={lowStock ? 'amber' : 'emerald'}
         />
       </motion.div>
 
@@ -120,6 +146,7 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           valueClass={stockout ? 'text-red-600 dark:text-red-400' : undefined}
           icon={<OctagonX className="size-3.5" />}
           iconClass={stockout ? 'bg-red-500/10 text-red-600' : 'bg-emerald-500/10 text-emerald-600'}
+          tone={stockout ? 'red' : 'emerald'}
         />
       </motion.div>
     </motion.section>

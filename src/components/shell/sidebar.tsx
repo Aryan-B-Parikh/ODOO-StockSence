@@ -46,9 +46,10 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Brand */}
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-base text-primary-foreground">
-          📦
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b bg-gradient-to-r from-primary/[0.07] to-transparent px-4">
+        <span className="relative flex size-8 items-center justify-center rounded-lg bg-primary text-base text-primary-foreground shadow-sm">
+          <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-lg bg-primary/40 blur-sm" />
+          <span className="relative">📦</span>
         </span>
         <div className="leading-tight">
           <div className="text-sm font-semibold tracking-tight">StockSense</div>
@@ -123,19 +124,22 @@ function SidebarLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
         }}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
+          'group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-all duration-150',
           active
-            ? 'bg-primary/10 font-medium text-primary'
+            ? 'bg-gradient-to-r from-primary/15 to-primary/5 font-medium text-primary'
             : 'text-foreground/70 hover:bg-accent hover:text-foreground'
         )}
       >
         {active && (
           <span
             aria-hidden="true"
-            className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-primary"
+            className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_6px] shadow-primary/50"
           />
         )}
-        <Icon className="size-4 shrink-0" aria-hidden="true" />
+        <Icon
+          className="size-4 shrink-0 transition-transform duration-150 group-hover:scale-110" 
+          aria-hidden="true"
+        />
         <span className="truncate">{item.label}</span>
       </button>
     </li>

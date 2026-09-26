@@ -5,6 +5,7 @@ import { create } from 'zustand'
 export const VIEW_KEYS = [
   'dashboard',
   'products',
+  'suppliers',
   'receipts',
   'deliveries',
   'transfers',

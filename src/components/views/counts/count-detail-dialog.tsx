@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ScanLine } from 'lucide-react'
+import { Printer, ScanLine } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -25,13 +25,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import { deltaColor, fmtSignedQty } from '@/lib/format'
 import type { CycleCountDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
+
+import { useCountSheetPrint } from './count-sheet-print'
 
 interface CountSubmitResponse {
   count: CycleCountDTO
@@ -69,6 +74,11 @@ function CountForm({ count, onDone }: { count: CycleCountDTO; onDone: () => void
   const [values, setValues] = useState<Record<number, string>>({})
   const [note, setNote] = useState('')
   const [cancelOpen, setCancelOpen] = useState(false)
+  const [blindCount, setBlindCount] = useState(false)
+  const sheetPrint = useCountSheetPrint()
+
+  const permissions = useAuthStore((s) => s.user?.permissions ?? [])
+  const canCount = permissions.includes('count')
 
   const submitMutation = useMutation({
     mutationFn: (payload: { lines: { lineId: number; countedQty: number }[]; note?: string }) =>
@@ -189,6 +199,46 @@ function CountForm({ count, onDone }: { count: CycleCountDTO; onDone: () => void
         </Table>
       </div>
 
+      {/* Paper tally sheet (Phase 5 pilot) — staff carry these on the floor */}
+      {canCount && (
+        <div className="flex flex-col gap-2.5 rounded-lg border border-dashed p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Printer className="size-4 text-muted-foreground" aria-hidden="true" />
+              <span className="text-sm font-medium">Paper tally sheet</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Switch
+                id="blind-count-switch"
+                checked={blindCount}
+                onCheckedChange={setBlindCount}
+                className="mt-0.5"
+                aria-describedby="blind-count-hint"
+              />
+              <div className="leading-tight">
+                <Label htmlFor="blind-count-switch" className="cursor-pointer text-xs font-medium">
+                  Blind count — hide system quantities
+                </Label>
+                <p id="blind-count-hint" className="text-[11px] text-muted-foreground">
+                  Blind counts reduce counter bias — the sheet is printed without the System column.
+                </p>
+              </div>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => void sheetPrint.print(count, { hideSystemQty: blindCount })}
+            disabled={sheetPrint.printing}
+          >
+            <Printer className="size-3.5" aria-hidden="true" />
+            Print sheet
+          </Button>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         <label htmlFor="count-note" className="text-xs font-medium text-muted-foreground">
           Note (optional)
@@ -242,6 +292,9 @@ function CountForm({ count, onDone }: { count: CycleCountDTO; onDone: () => void
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Print sheet portal — lives on document.body, escapes this dialog */}
+      {sheetPrint.portal}
     </>
   )
 }

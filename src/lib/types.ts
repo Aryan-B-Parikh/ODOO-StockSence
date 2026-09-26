@@ -77,6 +77,37 @@ export interface ProductListDTO {
   }
 }
 
+// ---------- Suppliers ----------
+
+/**
+ * A supplier → product link (the supplier-facing view of a ProductSupplier row).
+ * Named SupplierProductLinkDTO because SupplierLinkDTO (above) is already the
+ * product-facing view (product → its suppliers).
+ */
+export interface SupplierProductLinkDTO {
+  productId: number
+  sku: string
+  productName: string
+  unit: string
+  preferred: boolean
+  costPrice: number
+  minOrderQty: number
+  orderMultiple: number
+}
+
+/** Full supplier record with its linked products and link economics. */
+export interface SupplierDTO {
+  id: number
+  name: string
+  contact: string | null
+  leadTimeDays: number
+  reliability: number // on-time delivery rate 0-1
+  damageRate: number // fraction of goods damaged 0-1
+  notes: string | null
+  productCount: number
+  products: SupplierProductLinkDTO[]
+}
+
 // ---------- Receipts ----------
 
 export interface ReceiptLineDTO {

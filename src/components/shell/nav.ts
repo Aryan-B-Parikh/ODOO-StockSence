@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  Building2,
   ClipboardCheck,
   LayoutDashboard,
   Package,
@@ -28,6 +29,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     items: [
       { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, subtitle: 'Live overview of stock, value and exceptions' },
       { key: 'products', label: 'Products', icon: Package, subtitle: 'Catalog with split quantities per location' },
+      { key: 'suppliers', label: 'Suppliers', icon: Building2, subtitle: 'Vendor directory with lead times, MOQ and reliability' },
       { key: 'receipts', label: 'Receipts', icon: Truck, subtitle: 'Expected and received inbound goods' },
       { key: 'deliveries', label: 'Deliveries', icon: ClipboardCheck, subtitle: 'Customer orders from reservation to dispatch' },
       { key: 'transfers', label: 'Transfers', icon: ArrowLeftRight, subtitle: 'Internal moves between locations' },

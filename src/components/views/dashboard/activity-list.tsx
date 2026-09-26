@@ -60,7 +60,11 @@ export function ActivityList({ activity }: { activity: LedgerEntryDTO[] }) {
           ) : (
             <ul className="max-h-80 divide-y overflow-y-auto pr-1">
               {activity.map((entry) => (
-                <li key={entry.id} className="flex items-center gap-3 py-2.5" title={entry.code}>
+                <li
+                  key={entry.id}
+                  className="-mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors hover:bg-accent/50"
+                  title={entry.code}
+                >
                   <DocChip docType={entry.docType} docCode={entry.docCode} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-mono text-xs font-medium">{entry.sku}</div>

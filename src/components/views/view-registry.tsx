@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/ui-store'
 
 import { DashboardView } from './dashboard-view'
 import { ProductsView } from './products-view'
+import { SuppliersView } from './suppliers-view'
 import { ReceiptsView } from './receipts-view'
 import { DeliveriesView } from './deliveries-view'
 import { TransfersView } from './transfers-view'
@@ -17,21 +18,14 @@ import { ReorderView } from './reorder-view'
 
 /**
  * View registry — maps every ui-store view key to its view component.
- *
- * ⚠️ OWNERSHIP NOTE (Task 2 agents):
- * The nine non-dashboard entries currently point at STUB files. Each stub is
- * fully self-contained and must be REPLACED (whole file) by the owning agent:
- *   products-view.tsx, receipts-view.tsx          → Task 2-a
- *   deliveries-view.tsx, transfers-view.tsx,
- *   adjustments-view.tsx                          → Task 2-b
- *   counts-view.tsx, history-view.tsx,
- *   alerts-view.tsx, reorder-view.tsx             → Task 2-c
- * Keep the exact same NAMED export (see each stub's doc comment) and the
- * registry keeps working without any change here.
+ * Each view is a self-contained file exporting one NAMED component; add new
+ * views by importing them here and adding their key to the map (the key must
+ * exist in VIEW_KEYS in the ui-store).
  */
 export const VIEW_COMPONENTS: Record<string, ComponentType> = {
   dashboard: DashboardView,
   products: ProductsView,
+  suppliers: SuppliersView,
   receipts: ReceiptsView,
   deliveries: DeliveriesView,
   transfers: TransfersView,
