@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Stock {
+  id          Int     @id @default(autoincrement())
+  symbol      String  @unique
+  name        String
+  sector      String
+  exchange    String
+  description String
+  ceo         String?
+  hq          String?
+  employees   Int?
+  website     String?
+  founded     String?
+}
+
+model NewsItem {
+  id            Int      @id @default(autoincrement())
+  dateKey       String
+  slot          Int
+  symbol        String?
+  headline      String
+  summary       String
+  source        String
+  sentiment     Float
+  sentimentLabel String
+  impact        String
+  aiSummary     String?
+  publishedAt   DateTime
+
+  @@unique([dateKey, slot])
+  @@index([symbol, publishedAt])
+}
+
+model WatchItem {
+  id         Int      @id @default(autoincrement())
+  symbol     String   @unique
+  note       String?
+  alertAbove Float?
+  alertBelow Float?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Transaction {
+  id         Int      @id @default(autoincrement())
+  symbol     String
+  side       String
+  quantity   Float
+  price      Float
+  fee        Float    @default(0)
+  note       String?
+  executedAt DateTime @default(now())
+
+  @@index([symbol, executedAt])
+}
+
+model AnalysisReport {
+  id         Int      @id @default(autoincrement())
+  symbol     String
+  rating     String
+  score      Float
+  targetLow  Float?
+  targetHigh Float?
+  content    String
+  createdAt  DateTime @default(now())
+
+  @@index([symbol, createdAt])
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  sessionId String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+}

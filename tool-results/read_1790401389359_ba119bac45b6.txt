@@ -1,0 +1,843 @@
+     1→/**
+     2→ * StockSense — Deterministic Market Engine
+     3→ *
+     4→ * Generates a fully deterministic, time-seeded simulated market:
+     5→ *  - Daily closes: mean-reverting random walk from a FIXED anchor date, so any
+     6→ *    process (Next.js API, WebSocket service) computing at the same wall-clock
+     7→ *    time produces IDENTICAL prices without any shared state.
+     8→ *  - Intraday: Brownian-bridge minute bars for "today" converging to today's
+     9→ *    destined close, with sub-minute deterministic jitter for live feel.
+    10→ *  - All randomness is derived from hash(symbol, dateKey, stream) seeds.
+    11→ *
+    12→ * IMPORTANT: keep this module dependency-free (no Next.js, no Node built-ins
+    13→ * beyond what Bun/Node both provide) — it is imported by the market-ticker
+    14→ * mini-service via a relative path.
+    15→ */
+    16→
+    17→import { STOCKS, STOCK_BY_SYMBOL, INDICES, type StockDef } from './universe'
+    18→
+    19→// ---------------------------------------------------------------------------
+    20→// PRNG utilities
+    21→// ---------------------------------------------------------------------------
+    22→
+    23→export function hashString(str: string): number {
+    24→  let h = 2166136261 >>> 0
+    25→  for (let i = 0; i < str.length; i++) {
+    26→    h ^= str.charCodeAt(i)
+    27→    h = Math.imul(h, 16777619) >>> 0
+    28→  }
+    29→  return h >>> 0
+    30→}
+    31→
+    32→export function mulberry32(seed: number): () => number {
+    33→  let a = seed >>> 0
+    34→  return function () {
+    35→    a |= 0
+    36→    a = (a + 0x6d2b79f5) | 0
+    37→    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    38→    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    39→    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    40→  }
+    41→}
+    42→
+    43→function gauss(rng: () => number): number {
+    44→  // Box–Muller
+    45→  const u = Math.max(rng(), 1e-9)
+    46→  const v = rng()
+    47→  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
+    48→}
+    49→
+    50→// ---------------------------------------------------------------------------
+    51→// Date helpers (UTC day keys)
+    52→// ---------------------------------------------------------------------------
+    53→
+    54→export function utcDateKey(d: Date): string {
+    55→  return d.toISOString().slice(0, 10)
+    56→}
+    57→
+    58→export function dateKeyToDate(key: string): Date {
+    59→  return new Date(key + 'T00:00:00.000Z')
+    60→}
+    61→
+    62→export function addDays(key: string, days: number): string {
+    63→  const d = dateKeyToDate(key)
+    64→  d.setUTCDate(d.getUTCDate() + days)
+    65→  return utcDateKey(d)
+    66→}
+    67→
+    68→/** Trading calendar: the simulation trades 7 days a week (24/7 sim market). */
+    69→export function tradingDayKeys(endKey: string, count: number): string[] {
+    70→  const keys: string[] = []
+    71→  let k = endKey
+    72→  for (let i = 0; i < count; i++) {
+    73→    keys.push(k)
+    74→    k = addDays(k, -1)
+    75→  }
+    76→  return keys.reverse()
+    77→}
+    78→
+    79→// ---------------------------------------------------------------------------
+    80→// Engine state (cached on globalThis to survive HMR)
+    81→// ---------------------------------------------------------------------------
+    82→
+    83→const ANCHOR_DATE = '2023-01-02' // fixed so historical values never change
+    84→const MINUTES_PER_DAY = 1440
+    85→
+    86→interface SymbolState {
+    87→  /** dateKeys aligned with `closes`, always ending at "today" (inclusive). */
+    88→  dates: string[]
+    89→  /** Daily closes for dates. */
+    90→  closes: number[]
+    91→  /** Intraday minute closes for today. */
+    92→  intraDate: string
+    93→  intraCloses: number[]
+    94→  intraVolumes: number[]
+    95→  intraOpen: number
+    96→  /** Cached day stats. */
+    97→  dayStatsDate: string
+    98→  dayVolumeBase: number
+    99→}
+   100→
+   101→interface EngineState {
+   102→  symbols: Map<string, SymbolState>
+   103→}
+   104→
+   105→const g = globalThis as unknown as { __snsEngine?: EngineState }
+   106→
+   107→function getState(): EngineState {
+   108→  if (!g.__snsEngine) g.__snsEngine = { symbols: new Map() }
+   109→  return g.__snsEngine
+   110→}
+   111→
+   112→function getSymbolState(symbol: string): SymbolState {
+   113→  const st = getState()
+   114→  let s = st.symbols.get(symbol)
+   115→  if (!s) {
+   116→    s = {
+   117→      dates: [],
+   118→      closes: [],
+   119→      intraDate: '',
+   120→      intraCloses: [],
+   121→      intraVolumes: [],
+   122→      intraOpen: 0,
+   123→      dayStatsDate: '',
+   124→      dayVolumeBase: 0,
+   125→    }
+   126→    st.symbols.set(symbol, s)
+   127→  }
+   128→  return s
+   129→}
+   130→
+   131→// ---------------------------------------------------------------------------
+   132→// Daily series
+   133→// ---------------------------------------------------------------------------
+   134→
+   135→const KAPPA = 0.02 // mean-reversion strength toward base price
+   136→
+   137→function ensureDaily(def: StockDef, todayKey: string): SymbolState {
+   138→  const s = getSymbolState(def.symbol)
+   139→
+   140→  // Seed the anchor if this is a fresh state
+   141→  if (s.dates.length === 0) {
+   142→    // Walk from anchor, but if "today" is far from anchor we still need every
+   143→    // day. ~1100 days max is cheap. Start by filling anchor..today.
+   144→    const rng = mulberry32(hashString(def.symbol + ':dailyseed'))
+   145→    s.dates.push(ANCHOR_DATE)
+   146→    s.closes.push(def.basePrice * (0.94 + rng() * 0.12))
+   147→  }
+   148→
+   149→  // Extend day-by-day up to todayKey
+   150→  while (s.dates[s.dates.length - 1] < todayKey) {
+   151→    const nextDate = addDays(s.dates[s.dates.length - 1], 1)
+   152→    const prevClose = s.closes[s.closes.length - 1]
+   153→    const r = dailyReturn(def, nextDate, prevClose)
+   154→    s.dates.push(nextDate)
+   155→    s.closes.push(Math.max(0.5, prevClose * Math.exp(r)))
+   156→  }
+   157→
+   158→  // Trim old history beyond 800 days to bound memory
+   159→  if (s.dates.length > 800) {
+   160→    s.dates = s.dates.slice(-800)
+   161→    s.closes = s.closes.slice(-800)
+   162→  }
+   163→
+   164→  return s
+   165→}
+   166→
+   167→function dailyReturn(def: StockDef, dateKey: string, prevClose: number): number {
+   168→  const rng = mulberry32(hashString(`${def.symbol}:${dateKey}:r`))
+   169→  const pull = KAPPA * Math.log(def.basePrice / prevClose)
+   170→  return pull + def.dailyVol * gauss(rng)
+   171→}
+   172→
+   173→/** Deterministic daily gap (open vs prev close). */
+   174→function dayGap(def: StockDef, dateKey: string): number {
+   175→  const rng = mulberry32(hashString(`${def.symbol}:${dateKey}:gap`))
+   176→  return def.dailyVol * 0.35 * gauss(rng)
+   177→}
+   178→
+   179→/** Deterministic daily volume base (shares). */
+   180→function dayVolumeBase(def: StockDef, dateKey: string): number {
+   181→  const rng = mulberry32(hashString(`${def.symbol}:${dateKey}:vol`))
+   182→  const shares = (def.marketCapB * 1e9) / def.basePrice
+   183→  const turnover = 0.0045 + rng() * 0.006 // 0.45% – 1.05% of shares
+   184→  return shares * turnover
+   185→}
+   186→
+   187→// ---------------------------------------------------------------------------
+   188→// Intraday (today) — Brownian bridge toward today's destined close
+   189→// ---------------------------------------------------------------------------
+   190→
+   191→function uShape(minute: number): number {
+   192→  return (
+   193→    1 +
+   194→    1.6 * Math.exp(-minute / 40) +
+   195→    1.4 * Math.exp(-(MINUTES_PER_DAY - minute) / 40) +
+   196→    0.25 * Math.exp(-Math.pow((minute - 780) / 300, 2)) // lunch bump
+   197→  )
+   198→}
+   199→
+   200→function ensureIntraday(def: StockDef, now: Date): SymbolState {
+   201→  const todayKey = utcDateKey(now)
+   202→  const s = ensureDaily(def, todayKey)
+   203→
+   204→  if (s.intraDate !== todayKey) {
+   205→    // New day — reset intraday cache
+   206→    s.intraDate = todayKey
+   207→    s.intraCloses = []
+   208→    s.intraVolumes = []
+   209→    const prevClose = s.closes.length > 1 ? s.closes[s.closes.length - 2] : s.closes[0]
+   210→    s.intraOpen = Math.max(0.5, prevClose * (1 + dayGap(def, todayKey)))
+   211→    s.dayStatsDate = ''
+   212→  }
+   213→
+   214→  if (s.dayStatsDate !== todayKey) {
+   215→    s.dayVolumeBase = dayVolumeBase(def, todayKey)
+   216→    s.dayStatsDate = todayKey
+   217→  }
+   218→
+   219→  // How many minutes of today have elapsed?
+   220→  const minuteNow = Math.min(
+   221→    MINUTES_PER_DAY - 1,
+   222→    now.getUTCHours() * 60 + now.getUTCMinutes(),
+   223→  )
+   224→  const target = minuteNow + 1 // bars 0..minuteNow inclusive
+   225→
+   226→  if (s.intraCloses.length === 0) {
+   227→    const rng = mulberry32(hashString(`${def.symbol}:${todayKey}:intra`))
+   228→    const wiggleRng = mulberry32(hashString(`${def.symbol}:${todayKey}:wig`))
+   229→    const destiny = s.closes[s.closes.length - 1] // today's destined close
+   230→    const sigma = def.basePrice * def.dailyVol * 0.045
+   231→    let wiggle = 0
+   232→    let volSum = 0
+   233→    for (let m = 0; m < target; m++) {
+   234→      wiggle = wiggle * 0.996 + sigma * gauss(wiggleRng)
+   235→      const c =
+   236→        s.intraOpen +
+   237→        (destiny - s.intraOpen) * ((m + 1) / MINUTES_PER_DAY) +
+   238→        wiggle
+   239→      const vm =
+   240→        (s.dayVolumeBase / MINUTES_PER_DAY) *
+   241→        uShape(m) *
+   242→        (0.55 + rng() * 0.9)
+   243→      volSum += vm
+   244→      s.intraCloses.push(Math.max(0.2, c))
+   245→      s.intraVolumes.push(vm)
+   246→    }
+   247→    void volSum
+   248→  } else if (s.intraCloses.length < target) {
+   249→    // Extend incrementally — must reproduce the same stream as a fresh build,
+   250→    // so we regenerate deterministically from scratch only for the tail using
+   251→    // a stream seeded per absolute minute index (keeps determinism without
+   252→    // replaying the whole day).
+   253→    const destiny = s.closes[s.closes.length - 1]
+   254→    const sigma = def.basePrice * def.dailyVol * 0.045
+   255→    let wiggle = 0
+   256→    const volRng = mulberry32(hashString(`${def.symbol}:${todayKey}:intra`))
+   257→    const wiggleRng = mulberry32(hashString(`${def.symbol}:${todayKey}:wig`))
+   258→    // Fast-forward streams to current length (cheap: pure arithmetic)
+   259→    for (let m = 0; m < s.intraCloses.length; m++) {
+   260→      wiggle = wiggle * 0.996 + sigma * gauss(wiggleRng)
+   261→      volRng()
+   262→    }
+   263→    for (let m = s.intraCloses.length; m < target; m++) {
+   264→      wiggle = wiggle * 0.996 + sigma * gauss(wiggleRng)
+   265→      const c =
+   266→        s.intraOpen +
+   267→        (destiny - s.intraOpen) * ((m + 1) / MINUTES_PER_DAY) +
+   268→        wiggle
+   269→      const vm =
+   270→        (s.dayVolumeBase / MINUTES_PER_DAY) *
+   271→        uShape(m) *
+   272→        (0.55 + volRng() * 0.9)
+   273→      s.intraCloses.push(Math.max(0.2, c))
+   274→      s.intraVolumes.push(vm)
+   275→    }
+   276→  }
+   277→
+   278→  return s
+   279→}
+   280→
+   281→/** Sub-minute deterministic jitter so 2-second ticks feel alive. */
+   282→function jitter(def: StockDef, todayKey: string, minute: number, second: number): number {
+   283→  const h = hashString(`${def.symbol}:${todayKey}:${minute}:${second}:j`)
+   284→  return ((h % 1000) / 1000 - 0.5) * 0.0012
+   285→}
+   286→
+   287→// ---------------------------------------------------------------------------
+   288→// Public types
+   289→// ---------------------------------------------------------------------------
+   290→
+   291→export interface Quote {
+   292→  symbol: string
+   293→  name: string
+   294→  sector: string
+   295→  exchange: string
+   296→  price: number
+   297→  prevClose: number
+   298→  change: number
+   299→  changePct: number
+   300→  dayOpen: number
+   301→  dayHigh: number
+   302→  dayLow: number
+   303→  volume: number
+   304→  marketCap: number // billions
+   305→  peRatio: number
+   306→  dividendYield: number
+   307→  beta: number
+   308→  eps: number
+   309→  week52High: number
+   310→  week52Low: number
+   311→  /** last 26 daily closes + live price (sparkline) */
+   312→  spark: number[]
+   313→}
+   314→
+   315→export interface Bar {
+   316→  t: number // epoch ms
+   317→  o: number
+   318→  h: number
+   319→  l: number
+   320→  c: number
+   321→  v: number
+   322→}
+   323→
+   324→export type Range = '1D' | '5D' | '1M' | '3M' | '6M' | '1Y' | '2Y'
+   325→
+   326→export interface IndexQuote {
+   327→  key: string
+   328→  name: string
+   329→  value: number
+   330→  change: number
+   331→  changePct: number
+   332→  points: number[] // last 40 closes for sparkline
+   333→}
+   334→
+   335→export interface SectorPerf {
+   336→  sector: string
+   337→  changePct: number
+   338→  count: number
+   339→  leaders: { symbol: string; changePct: number }[]
+   340→  laggards: { symbol: string; changePct: number }[]
+   341→}
+   342→
+   343→// ---------------------------------------------------------------------------
+   344→// Public API
+   345→// ---------------------------------------------------------------------------
+   346→
+   347→export function nowUTC(): Date {
+   348→  return new Date()
+   349→}
+   350→
+   351→export function getQuote(symbol: string, at: Date = nowUTC()): Quote | null {
+   352→  const def = STOCK_BY_SYMBOL[symbol]
+   353→  if (!def) return null
+   354→  const s = ensureIntraday(def, at)
+   355→  const todayKey = utcDateKey(at)
+   356→  const minute = Math.min(MINUTES_PER_DAY - 1, at.getUTCHours() * 60 + at.getUTCMinutes())
+   357→  const sec = at.getUTCSeconds()
+   358→
+   359→  const prevClose = s.closes.length > 1 ? s.closes[s.closes.length - 2] : s.closes[0]
+   360→  const basePrice = s.intraCloses.length > 0 ? s.intraCloses[minute] : s.intraOpen
+   361→  const price = Math.max(0.2, basePrice * (1 + jitter(def, todayKey, minute, sec)))
+   362→
+   363→  const seen = s.intraCloses.slice(0, minute + 1)
+   364→  const dayHigh = seen.length ? Math.max(s.intraOpen, ...seen) : s.intraOpen
+   365→  const dayLow = seen.length ? Math.min(s.intraOpen, ...seen) : s.intraOpen
+   366→  const volume = s.intraVolumes.slice(0, minute + 1).reduce((a, b) => a + b, 0)
+   367→
+   368→  const closes365 = s.closes.slice(-365)
+   369→  const week52High = Math.max(...closes365, dayHigh, price)
+   370→  const week52Low = Math.min(...closes365, dayLow, price)
+   371→
+   372→  const ratio = price / def.basePrice
+   373→  const spark = [...s.closes.slice(-26), price]
+   374→
+   375→  return {
+   376→    symbol: def.symbol,
+   377→    name: def.name,
+   378→    sector: def.sector,
+   379→    exchange: def.exchange,
+   380→    price: round2(price),
+   381→    prevClose: round2(prevClose),
+   382→    change: round2(price - prevClose),
+   383→    changePct: round(((price - prevClose) / prevClose) * 100, 2),
+   384→    dayOpen: round2(s.intraOpen),
+   385→    dayHigh: round2(dayHigh),
+   386→    dayLow: round2(dayLow),
+   387→    volume: Math.round(volume),
+   388→    marketCap: round(def.marketCapB * ratio, 1),
+   389→    peRatio: def.peRatio > 0 ? round(def.peRatio * ratio, 1) : 0,
+   390→    dividendYield: def.dividendYield,
+   391→    beta: def.beta,
+   392→    eps: def.eps,
+   393→    week52High: round2(week52High),
+   394→    week52Low: round2(week52Low),
+   395→    spark: spark.map((x) => round2(x)),
+   396→  }
+   397→}
+   398→
+   399→export function getQuotes(at: Date = nowUTC()): Quote[] {
+   400→  return STOCKS.map((d) => getQuote(d.symbol, at)!)
+   401→}
+   402→
+   403→/** Compact live tick (used by the WebSocket service). */
+   404→export interface LiveTick {
+   405→  symbol: string
+   406→  p: number
+   407→  c: number // changePct
+   408→  v: number
+   409→}
+   410→
+   411→export function getLiveTicks(at: Date = nowUTC()): LiveTick[] {
+   412→  return STOCKS.map((d) => {
+   413→    const q = getQuote(d.symbol, at)!
+   414→    return { symbol: d.symbol, p: q.price, c: q.changePct, v: q.volume }
+   415→  })
+   416→}
+   417→
+   418→/** Historical close for a past dateKey (or live price for today). */
+   419→export function getCloseOn(symbol: string, dateKey: string, at: Date = nowUTC()): number {
+   420→  const def = STOCK_BY_SYMBOL[symbol]
+   421→  if (!def) return 0
+   422→  const todayKey = utcDateKey(at)
+   423→  if (dateKey >= todayKey) {
+   424→    return getQuote(symbol, at)!.price
+   425→  }
+   426→  const s = ensureDaily(def, todayKey)
+   427→  const idx = s.dates.indexOf(dateKey)
+   428→  if (idx === -1) {
+   429→    // Fallback: nearest earlier date
+   430→    for (let i = s.dates.length - 1; i >= 0; i--) {
+   431→      if (s.dates[i] <= dateKey) return s.closes[i]
+   432→    }
+   433→    return s.closes[0]
+   434→  }
+   435→  return s.closes[idx]
+   436→}
+   437→
+   438→/** End-of-day change (close vs prev close) for a specific dateKey. */
+   439→export function getDayChange(symbol: string, dateKey: string): { close: number; prevClose: number; changePct: number } {
+   440→  const def = STOCK_BY_SYMBOL[symbol]
+   441→  if (!def) return { close: 0, prevClose: 0, changePct: 0 }
+   442→  const todayKey = utcDateKey(new Date())
+   443→  const s = ensureDaily(def, dateKey < todayKey ? todayKey : dateKey)
+   444→  const idx = s.dates.indexOf(dateKey)
+   445→  if (idx <= 0) {
+   446→    return { close: s.closes[0], prevClose: s.closes[0], changePct: 0 }
+   447→  }
+   448→  const close = s.closes[idx]
+   449→  const prevClose = s.closes[idx - 1]
+   450→  return { close, prevClose, changePct: ((close - prevClose) / prevClose) * 100 }
+   451→}
+   452→
+   453→/** Hourly bridge prices for a past day (24 points), open → close. */
+   454→function hourlyBridge(def: StockDef, dateKey: string): number[] {
+   455→  const s = ensureDaily(def, utcDateKey(nowUTC()))
+   456→  const idx = s.dates.indexOf(dateKey)
+   457→  if (idx <= 0) return [s.closes[0]]
+   458→  const prevClose = s.closes[idx - 1]
+   459→  const close = s.closes[idx]
+   460→  const open = prevClose * (1 + dayGap(def, dateKey))
+   461→  const rng = mulberry32(hashString(`${def.symbol}:${dateKey}:bridge`))
+   462→  const sigma = def.basePrice * def.dailyVol * 0.5
+   463→  const out: number[] = [open]
+   464→  let wiggle = 0
+   465→  for (let h = 1; h <= 23; h++) {
+   466→    wiggle = wiggle * 0.55 + sigma * 0.45 * gauss(rng)
+   467→    out.push(open + (close - open) * (h / 24) + wiggle)
+   468→  }
+   469→  out.push(close)
+   470→  return out
+   471→}
+   472→
+   473→export function getCandles(symbol: string, range: Range, at: Date = nowUTC()): Bar[] {
+   474→  const def = STOCK_BY_SYMBOL[symbol]
+   475→  if (!def) return []
+   476→  const todayKey = utcDateKey(at)
+   477→  const s = ensureIntraday(def, at)
+   478→
+   479→  if (range === '1D') {
+   480→    const minuteNow = Math.min(MINUTES_PER_DAY - 1, at.getUTCHours() * 60 + at.getUTCMinutes())
+   481→    const dayStart = dateKeyToDate(todayKey).getTime()
+   482→    const bars: Bar[] = []
+   483→    for (let m = 0; m <= minuteNow; m++) {
+   484→      const c = s.intraCloses[m]
+   485→      const o = m === 0 ? s.intraOpen : s.intraCloses[m - 1]
+   486→      const wick = Math.abs(c - o) * 0.4 + c * 0.0004
+   487→      bars.push({
+   488→        t: dayStart + m * 60_000,
+   489→        o: round2(o),
+   490→        h: round2(Math.max(o, c) + wick * 0.7),
+   491→        l: round2(Math.min(o, c) - wick * 0.7),
+   492→        c: round2(c),
+   493→        v: Math.round(s.intraVolumes[m]),
+   494→      })
+   495→    }
+   496→    return bars
+   497→  }
+   498→
+   499→  const dayCount =
+   500→    range === '5D' ? 5 : range === '1M' ? 30 : range === '3M' ? 90 : range === '6M' ? 180 : range === '1Y' ? 365 : 730
+   501→
+   502→  const keys = tradingDayKeys(addDays(todayKey, -1), dayCount - 1) // past days
+   503→  const bars: Bar[] = []
+   504→
+   505→  if (range === '5D') {
+   506→    // Past days: hourly bridge (24 pts each), then today hourly (every 60th minute)
+   507→    for (const k of keys) {
+   508→      const bridge = hourlyBridge(def, k)
+   509→      const dayStart = dateKeyToDate(k).getTime()
+   510→      for (let h = 0; h < bridge.length; h++) {
+   511→        const c = bridge[h]
+   512→        const o = h === 0 ? bridge[0] : bridge[h - 1]
+   513→        const wick = Math.abs(c - o) * 0.5 + c * 0.0006
+   514→        bars.push({
+   515→          t: dayStart + h * 3_600_000,
+   516→          o: round2(o),
+   517→          h: round2(Math.max(o, c) + wick),
+   518→          l: round2(Math.min(o, c) - wick),
+   519→          c: round2(c),
+   520→          v: Math.round((s.dayVolumeBase || 1e6) / 24 * uShape(h * 60)),
+   521→        })
+   522→      }
+   523→    }
+   524→    const dayStart = dateKeyToDate(todayKey).getTime()
+   525→    for (let m = 0; m < s.intraCloses.length; m += 60) {
+   526→      const c = s.intraCloses[m]
+   527→      const o = m === 0 ? s.intraOpen : s.intraCloses[Math.max(0, m - 60)]
+   528→      bars.push({
+   529→        t: dayStart + m * 60_000,
+   530→        o: round2(o),
+   531→        h: round2(Math.max(o, c) * 1.0006),
+   532→        l: round2(Math.min(o, c) * 0.9994),
+   533→        c: round2(c),
+   534→        v: Math.round(s.intraVolumes.slice(m, m + 60).reduce((a, b) => a + b, 0)),
+   535→      })
+   536→    }
+   537→    return bars
+   538→  }
+   539→
+   540→  // Daily bars for 1M+
+   541→  for (const k of keys) {
+   542→    const idx = s.dates.indexOf(k)
+   543→    if (idx <= 0) continue
+   544→    const close = s.closes[idx]
+   545→    const prevClose = s.closes[idx - 1]
+   546→    const open = prevClose * (1 + dayGap(def, k))
+   547→    const bridge = hourlyBridge(def, k)
+   548→    const hi = Math.max(...bridge)
+   549→    const lo = Math.min(...bridge)
+   550→    bars.push({
+   551→      t: dateKeyToDate(k).getTime(),
+   552→      o: round2(open),
+   553→      h: round2(Math.max(hi, open, close)),
+   554→      l: round2(Math.min(lo, open, close)),
+   555→      c: round2(close),
+   556→      v: Math.round(dayVolumeBase(def, k)),
+   557→    })
+   558→  }
+   559→  // Append today's running candle
+   560→  const q = getQuote(symbol, at)!
+   561→  bars.push({
+   562→    t: dateKeyToDate(todayKey).getTime(),
+   563→    o: q.dayOpen,
+   564→    h: q.dayHigh,
+   565→    l: q.dayLow,
+   566→    c: q.price,
+   567→    v: q.volume,
+   568→  })
+   569→  return bars
+   570→}
+   571→
+   572→export function getIndices(at: Date = nowUTC()): IndexQuote[] {
+   573→  const quotes = new Map(getQuotes(at).map((q) => [q.symbol, q]))
+   574→
+   575→  const out: IndexQuote[] = INDICES.map((idx) => {
+   576→    const members = idx.members.map((m) => STOCK_BY_SYMBOL[m]).filter(Boolean)
+   577→    const weights = members.map((m) =>
+   578→      idx.weighting === 'cap' ? m.marketCapB : 1,
+   579→    )
+   580→    const wSum = weights.reduce((a, b) => a + b, 0)
+   581→
+   582→    const value =
+   583→      idx.base *
+   584→      members.reduce((acc, m, i) => acc + (weights[i] * (quotes.get(m.symbol)!.price / m.basePrice)) / wSum, 0)
+   585→    const prevValue =
+   586→      idx.base *
+   587→      members.reduce(
+   588→        (acc, m, i) => acc + (weights[i] * (quotes.get(m.symbol)!.prevClose / m.basePrice)) / wSum,
+   589→        0,
+   590→      )
+   591→
+   592→    // Sparkline from last 40 daily closes of members
+   593→    const todayKey = utcDateKey(at)
+   594→    const points: number[] = []
+   595→    const histKeys = tradingDayKeys(addDays(todayKey, -1), 39)
+   596→    for (const k of histKeys) {
+   597→      let v = 0
+   598→      for (let i = 0; i < members.length; i++) {
+   599→        v += (weights[i] * (getCloseOn(members[i].symbol, k, at) / members[i].basePrice)) / wSum
+   600→      }
+   601→      points.push(idx.base * v)
+   602→    }
+   603→    points.push(value)
+   604→
+   605→    const change = value - prevValue
+   606→    return {
+   607→      key: idx.key,
+   608→      name: idx.name,
+   609→      value: round(value, 2),
+   610→      change: round(change, 2),
+   611→      changePct: round((change / prevValue) * 100, 2),
+   612→      points: points.map((p) => round(p, 2)),
+   613→    }
+   614→  })
+   615→
+   616→  // Simulated volatility index
+   617→  const qs = [...quotes.values()]
+   618→  const avgAbs =
+   619→    qs.reduce((a, q) => a + Math.abs(q.changePct), 0) / qs.length
+   620→  const vix = Math.min(65, Math.max(8, 9 + avgAbs * 16))
+   621→  const todayKey = utcDateKey(at)
+   622→  let yAbsAcc = 0
+   623→  for (const def of STOCKS) {
+   624→    yAbsAcc += Math.abs(getDayChange(def.symbol, addDays(todayKey, -1)).changePct)
+   625→  }
+   626→  const prevVix = Math.min(65, Math.max(8, 9 + (yAbsAcc / STOCKS.length) * 16))
+   627→  out.push({
+   628→    key: 'VIX',
+   629→    name: 'Volatility Index',
+   630→    value: round(vix, 2),
+   631→    change: round(vix - prevVix, 2),
+   632→    changePct: round(((vix - prevVix) / prevVix) * 100, 2),
+   633→    points: Array.from({ length: 40 }, (_, i) =>
+   634→      round(vix * (0.9 + 0.2 * mulberry32(hashString(`vix:${i}`))()), 2),
+   635→    ),
+   636→  })
+   637→
+   638→  return out
+   639→}
+   640→
+   641→export function getMovers(at: Date = nowUTC()) {
+   642→  const qs = getQuotes(at)
+   643→  const byChange = [...qs].sort((a, b) => b.changePct - a.changePct)
+   644→  const byFlow = [...qs].sort(
+   645→    (a, b) => b.volume * b.price - a.volume * a.price,
+   646→  )
+   647→  return {
+   648→    gainers: byChange.slice(0, 6),
+   649→    losers: byChange.slice(-6).reverse(),
+   650→    mostActive: byFlow.slice(0, 6),
+   651→  }
+   652→}
+   653→
+   654→export function getSectorPerformance(at: Date = nowUTC()): SectorPerf[] {
+   655→  const qs = getQuotes(at)
+   656→  const bySector = new Map<string, Quote[]>()
+   657→  for (const q of qs) {
+   658→    if (!bySector.has(q.sector)) bySector.set(q.sector, [])
+   659→    bySector.get(q.sector)!.push(q)
+   660→  }
+   661→  const out: SectorPerf[] = []
+   662→  for (const [sector, list] of bySector) {
+   663→    const capSum = list.reduce((a, q) => a + q.marketCap, 0)
+   664→    const changePct = list.reduce((a, q) => a + q.changePct * q.marketCap, 0) / capSum
+   665→    const sorted = [...list].sort((a, b) => b.changePct - a.changePct)
+   666→    out.push({
+   667→      sector,
+   668→      changePct: round(changePct, 2),
+   669→      count: list.length,
+   670→      leaders: sorted.slice(0, 3).map((q) => ({ symbol: q.symbol, changePct: q.changePct })),
+   671→      laggards: sorted.slice(-2).reverse().map((q) => ({ symbol: q.symbol, changePct: q.changePct })),
+   672→    })
+   673→  }
+   674→  return out.sort((a, b) => b.changePct - a.changePct)
+   675→}
+   676→
+   677→export interface MarketBreadth {
+   678→  advancing: number
+   679→  declining: number
+   680→  unchanged: number
+   681→  total: number
+   682→}
+   683→
+   684→export function getBreadth(at: Date = nowUTC()): MarketBreadth {
+   685→  const qs = getQuotes(at)
+   686→  const advancing = qs.filter((q) => q.changePct > 0.05).length
+   687→  const declining = qs.filter((q) => q.changePct < -0.05).length
+   688→  return {
+   689→    advancing,
+   690→    declining,
+   691→    unchanged: qs.length - advancing - declining,
+   692→    total: qs.length,
+   693→  }
+   694→}
+   695→
+   696→export interface MarketSentiment {
+   697→  score: number
+   698→  label: string
+   699→  components: {
+   700→    breadth: number
+   701→    momentum: number
+   702→    volatility: number
+   703→    demand: number
+   704→  }
+   705→  prevScore: number
+   706→}
+   707→
+   708→export function getSentiment(at: Date = nowUTC()): MarketSentiment {
+   709→  const qs = getQuotes(at)
+   710→  const breadth = getBreadth(at)
+   711→
+   712→  const breadthScore = (breadth.advancing / breadth.total) * 100
+   713→
+   714→  // 7-day momentum: average return over last 7 daily closes
+   715→  const todayKey = utcDateKey(at)
+   716→  let momentumAcc = 0
+   717→  for (const def of STOCKS) {
+   718→    const s = ensureDaily(def, todayKey)
+   719→    const c7 = s.closes[Math.max(0, s.closes.length - 8)]
+   720→    const now = s.closes[s.closes.length - 2]
+   721→    momentumAcc += ((now - c7) / c7) * 100
+   722→  }
+   723→  const momentumAvg = momentumAcc / STOCKS.length
+   724→  const momentumScore = clamp(50 + momentumAvg * 9, 0, 100)
+   725→
+   726→  const avgAbs = qs.reduce((a, q) => a + Math.abs(q.changePct), 0) / qs.length
+   727→  const vix = Math.min(65, Math.max(8, 9 + avgAbs * 16))
+   728→  const volatilityScore = clamp(100 - vix * 1.55, 0, 100)
+   729→
+   730→  // Demand: volume vs typical (proxy: average across universe of vol/mcap)
+   731→  const demandRatio =
+   732→    qs.reduce((a, q) => a + (q.volume * q.price) / (q.marketCap * 1e9), 0) / qs.length
+   733→  const demandScore = clamp(38 + demandRatio * 1600, 0, 100)
+   734→
+   735→  const score =
+   736→    0.35 * breadthScore + 0.25 * momentumScore + 0.2 * volatilityScore + 0.2 * demandScore
+   737→  const prevScore = score * 0.97 + 1.5
+   738→
+   739→  return {
+   740→    score: round(score, 1),
+   741→    label: sentimentLabel(score),
+   742→    components: {
+   743→      breadth: round(breadthScore, 1),
+   744→      momentum: round(momentumScore, 1),
+   745→      volatility: round(volatilityScore, 1),
+   746→      demand: round(demandScore, 1),
+   747→    },
+   748→    prevScore: round(prevScore, 1),
+   749→  }
+   750→}
+   751→
+   752→function getCloseTodayAgo(symbol: string, days: number, at: Date): number {
+   753→  const def = STOCK_BY_SYMBOL[symbol]
+   754→  if (!def) return 0
+   755→  const s = ensureDaily(def, utcDateKey(at))
+   756→  return s.closes[Math.max(0, s.closes.length - 1 - days)]
+   757→}
+   758→
+   759→export function sentimentLabel(score: number): string {
+   760→  if (score < 25) return 'Extreme Fear'
+   761→  if (score < 45) return 'Fear'
+   762→  if (score < 56) return 'Neutral'
+   763→  if (score < 76) return 'Greed'
+   764→  return 'Extreme Greed'
+   765→}
+   766→
+   767→export function searchStocks(q: string, limit = 8, at: Date = nowUTC()) {
+   768→  const query = q.trim().toUpperCase()
+   769→  if (!query) {
+   770→    return getQuotes(at)
+   771→      .sort((a, b) => b.marketCap - a.marketCap)
+   772→      .slice(0, limit)
+   773→      .map((q2) => ({ symbol: q2.symbol, name: q2.name, sector: q2.sector, price: q2.price, changePct: q2.changePct }))
+   774→  }
+   775→  const scored = STOCKS.map((d) => {
+   776→    const sym = d.symbol.toUpperCase()
+   777→    const name = d.name.toUpperCase()
+   778→    let score = -1
+   779→    if (sym === query) score = 100
+   780→    else if (sym.startsWith(query)) score = 80
+   781→    else if (name.startsWith(query)) score = 60
+   782→    else if (sym.includes(query)) score = 40
+   783→    else if (name.includes(query)) score = 30
+   784→    else if (d.sector.toUpperCase().startsWith(query)) score = 10
+   785→    return { d, score }
+   786→  })
+   787→    .filter((x) => x.score > 0)
+   788→    .sort((a, b) => b.score - a.score || b.d.marketCapB - a.d.marketCapB)
+   789→    .slice(0, limit)
+   790→
+   791→  return scored.map(({ d }) => {
+   792→    const q3 = getQuote(d.symbol, at)!
+   793→    return { symbol: d.symbol, name: d.name, sector: d.sector, price: q3.price, changePct: q3.changePct }
+   794→  })
+   795→}
+   796→
+   797→export function getStockProfile(symbol: string) {
+   798→  const d = STOCK_BY_SYMBOL[symbol]
+   799→  if (!d) return null
+   800→  return {
+   801→    symbol: d.symbol,
+   802→    name: d.name,
+   803→    sector: d.sector,
+   804→    exchange: d.exchange,
+   805→    description: d.description,
+   806→    ceo: d.ceo,
+   807→    hq: d.hq,
+   808→    employees: d.employees,
+   809→    website: d.website,
+   810→    founded: d.founded,
+   811→    basePrice: d.basePrice,
+   812→  }
+   813→}
+   814→
+   815→export function getAllProfiles() {
+   816→  return STOCKS.map((d) => getStockProfile(d.symbol)!)
+   817→}
+   818→
+   819→export function getPeers(symbol: string, at: Date = nowUTC()): Quote[] {
+   820→  const def = STOCK_BY_SYMBOL[symbol]
+   821→  if (!def) return []
+   822→  return STOCKS.filter((d) => d.sector === def.sector && d.symbol !== symbol)
+   823→    .slice(0, 5)
+   824→    .map((d) => getQuote(d.symbol, at)!)
+   825→}
+   826→
+   827→// ---------------------------------------------------------------------------
+   828→// helpers
+   829→// ---------------------------------------------------------------------------
+   830→
+   831→function clamp(x: number, lo: number, hi: number): number {
+   832→  return Math.min(hi, Math.max(lo, x))
+   833→}
+   834→
+   835→function round(x: number, dp = 2): number {
+   836→  const f = Math.pow(10, dp)
+   837→  return Math.round(x * f) / f
+   838→}
+   839→
+   840→function round2(x: number): number {
+   841→  return round(x, 2)
+   842→}
+   843→
