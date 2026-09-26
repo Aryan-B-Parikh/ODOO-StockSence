@@ -51,6 +51,15 @@ export function DashboardPage() {
   });
 
   const kpis = kpisQuery.data;
+  const hasFilters = Boolean(type || status || warehouseId || locationId || categoryId);
+
+  const clearFilters = () => {
+    setType('');
+    setStatus('');
+    setWarehouseId('');
+    setLocationId('');
+    setCategoryId('');
+  };
 
   return (
     <section className="page">
@@ -119,6 +128,11 @@ export function DashboardPage() {
             </option>
           ))}
         </select>
+        {hasFilters && (
+          <button type="button" className="btn btn-secondary btn-small" onClick={clearFilters}>
+            Clear filters
+          </button>
+        )}
       </div>
 
       {kpisQuery.isLoading && <LoadingState label="Loading dashboard…" />}
