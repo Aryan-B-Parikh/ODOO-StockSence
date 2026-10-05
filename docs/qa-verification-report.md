@@ -494,7 +494,7 @@ DOCUMENTATION_CHANGES   : docs/qa-verification-report.md, docs/qa-verification-m
 | 4 | Important negative paths tested | **YES** |
 | 5 | Important boundaries tested | **YES** |
 | 6 | Critical integration paths tested | **PARTIAL** (API↔DB yes, UI no) |
-| 7 | Regression tests exist for material defects | **YES** (16 unit + 34 e2e + 24 E2E checks) — was NO |
+| 7 | Regression tests exist for material defects | **YES** (16 unit + 38 e2e + 24 E2E checks) — was NO |
 | 8 | Flaky tests identified | **YES** (1) |
 | 9 | Test evidence reproducible | **YES** |
 | 10 | Critical gaps resolved or accepted | **YES** — QA-001 and QA-002 both remediated |
@@ -509,7 +509,7 @@ DOCUMENTATION_CHANGES   : docs/qa-verification-report.md, docs/qa-verification-m
 Ledger reconciliation; all five engine invariants; auth lifecycle incl. session destruction; permission gating incl. gate-before-lookup ordering; negative and boundary error handling; contract shapes; concurrency atomicity on the delivery path; OTP CSPRNG + attempt limiting + lockout; 9 of 12 acceptance criteria.
 
 ### What is not verified
-UI rendering, keyboard/screen-reader behaviour (delegated to the UX pass, `HEURISTIC_REVIEW`), code coverage (**never claim coverage — not measured**), real SMTP delivery (mail is in-memory), deployment packaging (blocked), receipt/transfer/count paths under concurrency, performance against targets (none documented), and the mail/OTP feature's functional correctness end-to-end.
+UI rendering, keyboard/screen-reader behaviour (delegated to the UX pass, `HEURISTIC_REVIEW`), **app-wide** code coverage (instrumentation now exists — `npm run test:coverage` — but reports only the source files unit tests load, so the figure is not app-wide and must not be quoted as such), real SMTP delivery (mail is in-memory), deployment packaging (blocked), receipt/cycle-count paths under concurrency, performance against targets (none documented), and the mail/OTP feature's functional correctness end-to-end.
 
 ### What failed, and what was done about it
 QA-001 and QA-002 (suite could not fail; no infrastructure) and QA-004 (no rate limiting)

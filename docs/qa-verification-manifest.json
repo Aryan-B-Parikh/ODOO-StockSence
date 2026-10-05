@@ -60,12 +60,12 @@
 
     "post_remediation": {
       "description": "re-run after the owner delegated the fixes; supersedes the audit-time figures above",
-      "automated_checks": 144,
-      "passed": 144,
+      "automated_checks": 148,
+      "passed": 148,
       "failed": 0,
       "suites": {
         "npm test (unit)": "16/16",
-        "npm run test:e2e": "34/34",
+        "npm run test:e2e": "38/38",
         "npm run test:mail": "24 passed, 0 failed, 2 explicit SKIP",
         "npm run audit:a11y": "70/70"
       },
@@ -80,7 +80,7 @@
 
   "coverage": {
     "code": null,
-    "code_note": "not measured - no instrumentation or test runner available",
+    "code_note": "app-wide coverage not measured - instrumentation now available via npm run test:coverage (--experimental-test-coverage), but e2e suites run in a separate server process that Node cannot instrument. The reported 100% applies only to source files loaded by unit tests and must not be quoted as app-wide coverage.",
     "requirements": "14/15 derived requirements mapped to executable tests",
     "behavior": "engine invariants, auth lifecycle, permission gates, negative paths, boundary paths, concurrency (delivery path)",
     "failure_modes": "malformed input, unauthorized role, insufficient stock, below-zero adjustment, unknown id, blocked mutation",

@@ -20,9 +20,10 @@ The remaining unmet criterion is #12, blocked by BLK-02.
 | `npm test` | exit 0 — **16/16** (unit) |
 | `npm run test:e2e` | exit 0 — **38/38** (contract, auth, permissions, negative, delivery + transfer concurrency) |
 | `npm run test:mail` | exit 0 — **24 passed, 0 failed, 2 skipped** |
+| `npm run test:coverage` | exit 0 — `--experimental-test-coverage` works; reports 100% of the source files the unit tests actually load (not app-wide) |
 | `bash tests/*.sh` (×3) | exit 0 — **SKIP** (`verified NOTHING`, QA-009) |
 
-**144 checks executed, 0 failures.** (16 + 34 + 24 + 70.)
+**148 checks executed, 0 failures.** (16 + 38 + 24 + 70.)
 
 ## Completion criteria (§45)
 
@@ -79,10 +80,15 @@ add up. Corrected here and in the report.)*
 ## Not verified
 
 UI rendering; keyboard/screen-reader behaviour (delegated — `HEURISTIC_REVIEW`, never a
-user study); code coverage (**never claim coverage — not measured**); real SMTP delivery
-(mail is in-memory); deployment packaging (BLK-03); receipt/transfer/cycle-count paths
-under concurrency; performance against targets (none are documented); mail/OTP functional
-correctness end-to-end beyond the checks listed above.
+user study); **app-wide** code coverage (see note below); real SMTP delivery (mail is
+in-memory); deployment packaging (BLK-03); receipt/cycle-count paths under concurrency;
+performance against targets (none are documented); mail/OTP functional correctness
+end-to-end beyond the checks listed above.
+
+> **Coverage note.** `npm run test:coverage` now works and reports 100% of the source
+> files the unit tests load — but that is *one file*. The e2e suites run against a
+> separate server process, which Node's instrumentation cannot see. **Do not quote that
+> 100% as app-wide coverage.**
 
 ## Data footprint
 
