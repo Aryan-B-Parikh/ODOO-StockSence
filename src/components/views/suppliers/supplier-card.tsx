@@ -30,9 +30,16 @@ export function SupplierCard({
 }) {
   const leadFast = supplier.leadTimeDays <= 3
   const leadSlow = supplier.leadTimeDays > 7
-  const reliabilityHigh = supplier.reliability >= 0.95
-  const reliabilityMid = supplier.reliability >= 0.85
-  const damageBad = supplier.damageRate > 0.02
+  const scorecard = supplier.scorecard
+  // Prefer performance measured from real receipts; fall back to the planner's
+  // estimate only while a supplier has no received history.
+  const reliability =
+    scorecard?.measured && scorecard.onTimeRate != null ? scorecard.onTimeRate : supplier.reliability
+  const damageRate =
+    scorecard?.measured && scorecard.damageRate != null ? scorecard.damageRate : supplier.damageRate
+  const reliabilityHigh = reliability >= 0.95
+  const reliabilityMid = reliability >= 0.85
+  const damageBad = damageRate > 0.02
 
   const preview = supplier.products.slice(0, 3)
   const moreCount = supplier.products.length - preview.length
@@ -79,6 +86,11 @@ export function SupplierCard({
                   ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
                   : 'border-stone-500/30 bg-stone-500/10 text-stone-600 dark:text-stone-300'
             )}
+            title={
+              scorecard?.measured && scorecard.avgLeadDays != null
+                ? `Planned ${supplier.leadTimeDays}d · measured average ${scorecard.avgLeadDays}d`
+                : `Planned lead time ${supplier.leadTimeDays}d`
+            }
           >
             <Truck className="size-3" aria-hidden="true" />
             {supplier.leadTimeDays} {supplier.leadTimeDays === 1 ? 'day' : 'days'}
@@ -90,9 +102,13 @@ export function SupplierCard({
                 ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400'
                 : 'border-stone-500/30 bg-stone-500/10 text-stone-600 dark:text-stone-300'
             )}
-            title="Share of received goods that arrive damaged"
+            title={
+              scorecard?.measured
+                ? `Measured: damaged units ÷ received units across ${scorecard.receipts} receipts`
+                : 'Estimate — no received receipts yet'
+            }
           >
-            {(supplier.damageRate * 100).toFixed(1)}% damage
+            {(damageRate * 100).toFixed(1)}% damage
           </span>
         </div>
 
@@ -110,11 +126,11 @@ export function SupplierCard({
                     : 'text-red-600 dark:text-red-400'
               )}
             >
-              {Math.round(supplier.reliability * 100)}%
+              {Math.round(reliability * 100)}%
             </span>
           </div>
           <ReliabilityBar
-            value={supplier.reliability}
+            value={reliability}
             className={
               reliabilityHigh
                 ? 'bg-emerald-500'
@@ -123,6 +139,11 @@ export function SupplierCard({
                   : 'bg-red-500'
             }
           />
+          <p className="text-[10px] text-muted-foreground/80">
+            {scorecard?.measured
+              ? scorecard.basis
+              : 'Estimate — no received receipts yet'}
+          </p>
         </div>
 
         {/* Product links preview */}

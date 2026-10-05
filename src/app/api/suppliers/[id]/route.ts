@@ -3,7 +3,8 @@ import type { Prisma } from '@prisma/client'
 import { requirePermission, requireUser } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { HttpError } from '@/lib/http'
-import type { SupplierDTO } from '@/lib/types'
+import { computeSupplierScorecard, emptyScorecard } from '@/lib/supplier-metrics'
+import type { SupplierDTO, SupplierScorecardDTO } from '@/lib/types'
 import { numericParam, readJson, toNum } from '@/app/api/_lib/route-helpers'
 
 export const dynamic = 'force-dynamic'
@@ -17,7 +18,7 @@ const SUPPLIER_INCLUDE = {
 
 type SupplierRow = Prisma.SupplierGetPayload<{ include: typeof SUPPLIER_INCLUDE }>
 
-function toSupplierDTO(s: SupplierRow): SupplierDTO {
+function toSupplierDTO(s: SupplierRow, scorecard: SupplierScorecardDTO = emptyScorecard()): SupplierDTO {
   const products = s.products
     .slice()
     .sort(
@@ -44,6 +45,7 @@ function toSupplierDTO(s: SupplierRow): SupplierDTO {
     notes: s.notes,
     productCount: products.length,
     products,
+    scorecard,
   }
 }
 
@@ -95,7 +97,8 @@ export async function GET(_req: Request, ctx: Ctx) {
     const id = numericParam((await ctx.params).id)
     const row = await db.supplier.findUnique({ where: { id }, include: SUPPLIER_INCLUDE })
     if (!row) throw new HttpError(404, 'Supplier not found')
-    return NextResponse.json({ supplier: toSupplierDTO(row) })
+    const scorecard = await computeSupplierScorecard(db, id)
+    return NextResponse.json({ supplier: toSupplierDTO(row, scorecard) })
   } catch (e) {
     if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status })
     console.error(e)
@@ -223,7 +226,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
     const row = await db.supplier.findUnique({ where: { id }, include: SUPPLIER_INCLUDE })
     if (!row) throw new HttpError(404, 'Supplier not found')
-    return NextResponse.json({ supplier: toSupplierDTO(row) })
+    const scorecard = await computeSupplierScorecard(db, id)
+    return NextResponse.json({ supplier: toSupplierDTO(row, scorecard) })
   } catch (e) {
     if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status })
     console.error(e)
