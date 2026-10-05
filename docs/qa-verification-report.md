@@ -368,7 +368,7 @@ High behavioural coverage here does **not** imply code coverage, and neither imp
 | QA-ID | Title | Sev | Requirement | Component | Status |
 |---|---|---|---|---|---|
 | QA-001 | Existing test suite cannot fail (0 assertions, reports PASS on 404, always exit 0) | **CRITICAL** | REQ-MAIL-1 | `test_mail_usecases.mjs` | **RESOLVED** |
-| QA-002 | No test framework, no `test` script, no CI; standing "Do NOT write test files" rule | **CRITICAL** | §45.1 | repo / `worklog.md:15` | **PARTIAL** — runner + 50 tests exist, CI still absent |
+| QA-002 | No test framework, no `test` script, no CI; standing "Do NOT write test files" rule | **CRITICAL** | §45.1 | repo / `worklog.md:15` | **PARTIAL** — runner + 54 tests exist, CI still absent |
 | QA-003 | Password-reset OTP generated with `Math.random()` (non-CSPRNG) | **HIGH** | security | `api/auth/otp/route.ts` | **RESOLVED** |
 | QA-004 | No attempt limiting on OTP verification; wrong code never invalidates | **HIGH** | security | `lib/auth/otp-store.ts` | **RESOLVED** |
 | QA-005 | `debugOtp` returned when `NODE_ENV !== 'production'` | **MEDIUM** | security | `api/auth/otp/route.ts` | **RESOLVED** |
@@ -546,18 +546,18 @@ See `docs/qa-verification-manifest.json`.
 | `npm run audit:a11y` | exit 0 — `ALL CHECKS PASS` (70 checks) |
 | `npm run build` | **exit 0** — was exit 1 from POSIX `cp` |
 | `npm test` | exit 0 — **16/16** (new) |
-| `npm run test:e2e` | exit 0 — **34/34** (new) |
-| `npm run test:mail` | exit 0 — **24 passed, 0 failed, 2 explicit SKIP** |
+| `npm run test:e2e` | exit 0 — **38/38** (new; includes a second atomicity path over transfers) |
+| `npm run test:mail` | exit 0 — **27 passed, 0 failed, 2 explicit SKIP** |
 | `bash tests/*.sh` (×3) | exit 0 — **SKIP**, message states `verified NOTHING` |
 
-**144 checks executed, 0 failures.**
+**151 checks executed, 0 failures.**
 
 ### §28.2 Per-finding verification
 
 | ID | Fix applied | How it was re-verified |
 |---|---|---|
-| QA-001 | Real assertions, `process.exitCode = 1` on failure, route corrected `/login` → `/`, dynamic id resolution (dropped hardcoded `productId: 192`) | Full run: 24 passed, 0 failed. A deliberately wrong assertion was added to confirm the harness *can* fail |
-| QA-002 | `node:test` runner (zero new deps); `tests/unit/` + `tests/e2e/`; 3 npm scripts | 16/16 and 34/34 green; `npm test` exits non-zero when an assertion fails |
+| QA-001 | Real assertions, `process.exitCode = 1` on failure, route corrected `/login` → `/`, dynamic id resolution (dropped hardcoded `productId: 192`) | Full run: 27 passed, 0 failed (was 24; +3 added when SEC-001 closed the mail routes). A deliberately wrong assertion was added to confirm the harness *can* fail |
+| QA-002 | `node:test` runner (zero new deps); `tests/unit/` + `tests/e2e/`; 4 npm scripts | 16/16 and 38/38 green; `npm test` exits non-zero when an assertion fails |
 | QA-003 | `crypto.randomInt(100000, 1000000)` | Source read + e2e asserts a 6-digit code |
 | QA-004 | Attempt counter, code destroyed at 5 misses, HTTP 429 | `tests/unit/otp-store.test.mjs` — 7 cases incl. correct-code-after-lock → `missing` |
 | QA-005 | `OTP_DEBUG=1` opt-in replaces `NODE_ENV`; flag set in `.env` | e2e confirms `debugOtp` still returned locally; absent without the flag |
@@ -576,7 +576,7 @@ See `docs/qa-verification-manifest.json`.
   is **not** evidence that `examples/` compiles.
 - **QA-009 root cause is open.** The scripts skip; they do not test. Deployment remains
   uncovered (BLK-03).
-- **QA-002 is PARTIAL, not closed.** 50 regression tests exist but nothing runs them
+- **QA-002 is PARTIAL, not closed.** 54 regression tests exist but nothing runs them
   automatically — CI is still absent (BLK-01).
 - **QA-008 root cause is open.** The stale figures were preserved as history and
   annotated; no non-destructive fixture path exists (BLK-04).

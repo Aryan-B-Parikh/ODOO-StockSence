@@ -41,7 +41,7 @@ export function DecisionHistory({ suggestions }: { suggestions: ReorderSuggestio
                     className={cn(
                       'flex size-6 shrink-0 items-center justify-center rounded-full',
                       s.status === 'ACCEPTED'
-                        ? 'bg-emerald-500/10 text-emerald-600'
+                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                         : 'bg-stone-500/10 text-stone-500'
                     )}
                   >

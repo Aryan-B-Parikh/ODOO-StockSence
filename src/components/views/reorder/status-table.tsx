@@ -96,7 +96,7 @@ export function StatusTable() {
                         <TableCell
                           className={cn(
                             'text-right font-mono text-xs font-semibold tabular',
-                            p.belowReorder && 'text-amber-600'
+                            p.belowReorder && 'text-amber-700 dark:text-amber-400'
                           )}
                         >
                           {fmtQty(projected, p.unit)}

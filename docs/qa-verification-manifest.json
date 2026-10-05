@@ -60,13 +60,13 @@
 
     "post_remediation": {
       "description": "re-run after the owner delegated the fixes; supersedes the audit-time figures above",
-      "automated_checks": 148,
-      "passed": 148,
+      "automated_checks": 151,
+      "passed": 151,
       "failed": 0,
       "suites": {
         "npm test (unit)": "16/16",
         "npm run test:e2e": "38/38",
-        "npm run test:mail": "24 passed, 0 failed, 2 explicit SKIP",
+        "npm run test:mail": "27 passed, 0 failed, 2 explicit SKIP",
         "npm run audit:a11y": "70/70"
       },
       "other_commands": {
@@ -172,9 +172,9 @@
       { "id": "EV-010", "test_id": "S-04", "command": "npm run build", "result": "Compiled successfully (exit 1 from Windows cp)", "level": "EXECUTION-VERIFIED" },
       { "id": "EV-011", "test_id": "S-06..08", "command": "bash tests/*.sh", "result": "exit 1 line 5 - .zscripts missing", "level": "BLOCKED" },
       { "id": "EV-012", "test_id": "S-14", "command": "node qa-tput.mjs", "result": "64 req/s, P(brute-force within TTL)=4.21%", "level": "EXECUTION-VERIFIED" },
-      { "id": "EV-013", "test_id": "S-05", "command": "node test_mail_usecases.mjs", "result": "24 passed, 0 failed, 2 explicit SKIP; exit 0 (post-fix)", "level": "EXECUTION-VERIFIED" },
+      { "id": "EV-013", "test_id": "S-05", "command": "node test_mail_usecases.mjs", "result": "27 passed, 0 failed, 2 explicit SKIP; exit 0 (post-fix; includes 3 SEC-001 anonymous-caller checks)", "level": "EXECUTION-VERIFIED" },
       { "id": "EV-014", "test_id": "S-15", "command": "npm test", "result": "16/16 pass, exit 0 (unit: ledger invariants + OTP attempt limiting)", "level": "EXECUTION-VERIFIED" },
-      { "id": "EV-015", "test_id": "S-16", "command": "npm run test:e2e", "result": "34/34 pass, exit 0 (contract/auth/permissions/negative/concurrency)", "level": "EXECUTION-VERIFIED" },
+      { "id": "EV-015", "test_id": "S-16", "command": "npm run test:e2e", "result": "38/38 pass, exit 0 (contract/auth/permissions/negative/delivery+transfer concurrency)", "level": "EXECUTION-VERIFIED" },
       { "id": "EV-016", "test_id": "S-17", "command": "read docs/acceptance-criteria.md", "result": "present, marked DERIVED with provenance table", "level": "REPO-VERIFIED" },
       { "id": "EV-017", "test_id": "S-02", "command": "npx tsc --noEmit", "result": "exit 0, 0 errors (was exit 2 with 3 errors)", "level": "EXECUTION-VERIFIED" },
       { "id": "EV-018", "test_id": "S-04", "command": "npm run build", "result": "exit 0; copy-standalone copied 25 + 10 files (was exit 1 from POSIX cp)", "level": "EXECUTION-VERIFIED" },
@@ -210,7 +210,7 @@
 
   "findings": [
     { "qa_id": "QA-001", "title": "Existing test suite cannot fail: zero assertions, reports PASSED for HTTP 404, always exits 0", "severity": "critical", "status": "RESOLVED", "component": "test_mail_usecases.mjs", "evidence": ["EV-006", "EV-013"], "verification_level": "EXECUTION-VERIFIED", "priority": "P0", "fix": "24 real assertions, exit code 1 on failure, route /login -> /, dynamic id resolution" },
-    { "qa_id": "QA-002", "title": "No test framework, no test script, no CI; standing rule forbids test files", "severity": "critical", "status": "PARTIAL", "component": "package.json / worklog.md:15", "evidence": ["EV-008", "EV-014", "EV-015"], "verification_level": "EXECUTION-VERIFIED", "priority": "P0", "blocker": "BLK-01", "fix": "node:test runner added; npm test 16/16, npm run test:e2e 34/34; worklog.md rule superseded by appended correction. CI still absent." },
+    { "qa_id": "QA-002", "title": "No test framework, no test script, no CI; standing rule forbids test files", "severity": "critical", "status": "PARTIAL", "component": "package.json / worklog.md:15", "evidence": ["EV-008", "EV-014", "EV-015"], "verification_level": "EXECUTION-VERIFIED", "priority": "P0", "blocker": "BLK-01", "fix": "node:test runner added; npm test 16/16, npm run test:e2e 38/38; worklog.md rule superseded by appended correction. CI still absent." },
     { "qa_id": "QA-003", "title": "Password-reset OTP generated with Math.random() (non-CSPRNG, CWE-338)", "severity": "high", "status": "RESOLVED", "component": "src/app/api/auth/otp/route.ts", "evidence": ["EV-013"], "verification_level": "EXECUTION-VERIFIED", "priority": "P1", "fix": "crypto.randomInt(100000, 1000000)" },
     { "qa_id": "QA-004", "title": "No attempt limiting on OTP verification; wrong code never invalidates the stored OTP", "severity": "high", "status": "RESOLVED", "component": "src/lib/auth/otp-store.ts", "evidence": ["EV-005", "EV-012", "EV-014"], "verification_level": "EXECUTION-VERIFIED", "priority": "P1", "fix": "attempt counter; code destroyed after 5 misses; HTTP 429; covered by tests/unit/otp-store.test.mjs" },
     { "qa_id": "QA-005", "title": "debugOtp returned in response when NODE_ENV !== production", "severity": "medium", "status": "RESOLVED", "component": "src/app/api/auth/otp/route.ts", "evidence": ["EV-006", "EV-013"], "verification_level": "EXECUTION-VERIFIED", "priority": "P2", "fix": "explicit OTP_DEBUG=1 opt-in (decision D-QA-11)" },

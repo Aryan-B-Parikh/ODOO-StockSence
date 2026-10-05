@@ -168,7 +168,7 @@ export function ReceiptDetailDialog({
             </span>
             {receipt.receivedAt && (
               <span className="inline-flex items-center gap-1">
-                <CircleCheck className="size-3 text-emerald-600" aria-hidden="true" /> Received {fmtDate(receipt.receivedAt)}
+                <CircleCheck className="size-3 text-emerald-700 dark:text-emerald-400" aria-hidden="true" /> Received {fmtDate(receipt.receivedAt)}
               </span>
             )}
             <span>Created {timeAgo(receipt.createdAt)}</span>

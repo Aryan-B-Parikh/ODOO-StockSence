@@ -85,5 +85,5 @@ export function titleCase(s: string): string {
 /** delta → tailwind text color */
 export function deltaColor(n: number | null | undefined): string {
   if (n == null || !isFinite(n) || n === 0) return 'text-muted-foreground'
-  return n > 0 ? 'text-emerald-600' : 'text-red-600'
+  return n > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'
 }

@@ -63,7 +63,7 @@ export function OfflineBanner() {
           aria-live="polite"
         >
           <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 md:px-6">
-            <WifiOff className="size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+            <WifiOff className="size-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden="true" />
             <p className="min-w-0 flex-1 text-xs leading-snug font-medium text-amber-800 dark:text-amber-200">
               {message}
             </p>
@@ -146,7 +146,7 @@ function OfflineQueueSheet({
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <SheetHeader className="border-b pr-10">
           <SheetTitle className="flex items-center gap-2">
-            <WifiOff className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+            <WifiOff className="size-4 text-amber-700 dark:text-amber-400" aria-hidden="true" />
             Offline queue
           </SheetTitle>
           <SheetDescription>

@@ -167,7 +167,7 @@ export function ProductsView() {
                 label="Active SKUs"
                 value={String(data.summary.totalSkus)}
                 icon={<Package className="size-3.5" />}
-                iconClass="bg-emerald-500/10 text-emerald-600"
+                iconClass="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
               />
             </motion.div>
             <motion.div variants={fadeUp}>
@@ -183,8 +183,8 @@ export function ProductsView() {
                 label="Below Reorder"
                 value={String(data.summary.belowReorder)}
                 icon={<AlertTriangle className="size-3.5" />}
-                iconClass="bg-amber-500/10 text-amber-600"
-                valueClass={data.summary.belowReorder > 0 ? 'text-amber-600 dark:text-amber-400' : undefined}
+                iconClass="bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                valueClass={data.summary.belowReorder > 0 ? 'text-amber-700 dark:text-amber-400' : undefined}
               />
             </motion.div>
             <motion.div variants={fadeUp}>

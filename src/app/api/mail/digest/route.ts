@@ -2,11 +2,21 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { mailService } from '@/lib/mail/service';
 import { computeAttention } from '@/lib/attention';
+import { requireUser } from '@/lib/auth';
+import { HttpError } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * POST /api/mail/digest - dispatch the daily shift digest.
+ *
+ * SEC-001: unauthenticated. Dispatching mail must never be open to the internet
+ * (email bombing / cost abuse); requires a session (docs/security-audit-report.md).
+ */
 export async function POST() {
   try {
+    await requireUser();
+
     const today = new Date().toISOString().slice(0, 10);
 
     // 1. Fetch managers
@@ -44,8 +54,11 @@ export async function POST() {
       recipients,
     });
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error('[mail] Daily digest error:', errorMsg);
-    return NextResponse.json({ error: errorMsg }, { status: 500 });
+    if (err instanceof HttpError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    // Never echo err.message: it can carry paths or driver detail (QA-007).
+    console.error('[mail] Daily digest error:', err);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

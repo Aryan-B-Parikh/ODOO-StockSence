@@ -348,7 +348,7 @@ export function LoginView() {
               role="alert"
               className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-3"
             >
-              <WifiOff className="size-4 shrink-0 text-amber-600" aria-hidden="true" />
+              <WifiOff className="size-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden="true" />
               <div className="min-w-0 flex-1 text-xs leading-relaxed text-amber-700">
                 <span className="font-semibold">Airplane-mode simulation is on</span> — API calls are
                 blocked, so sign-in can't reach the server.
@@ -393,7 +393,7 @@ export function LoginView() {
                     if (curr) setResetEmail(curr)
                     setForgotOpen(true)
                   }}
-                  className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                  className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
                 >
                   Forgot password?
                 </button>
@@ -469,7 +469,7 @@ export function LoginView() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-2.5">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
                 <KeyRound className="size-4.5" />
               </span>
               <div>
@@ -519,7 +519,7 @@ export function LoginView() {
           ) : (
             <form onSubmit={handleResetPassword} className="space-y-4 pt-2">
               <div className="rounded-lg bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2 border border-emerald-500/20">
-                <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <CheckCircle2 className="size-4 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <div>
                   Verification code dispatched to <strong>{resetEmail}</strong>.
                   {debugOtp && (

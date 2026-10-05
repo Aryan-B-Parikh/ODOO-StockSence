@@ -127,7 +127,7 @@ export function FlagCard({ flag }: { flag: ExceptionFlagDTO }) {
 export function FlagsEmptyState() {
   return (
     <div className="col-span-full flex flex-col items-center gap-1.5 rounded-lg border border-dashed py-10 text-center">
-      <ShieldQuestion className="size-6 text-emerald-600" aria-hidden="true" />
+      <ShieldQuestion className="size-6 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
       <p className="text-sm font-medium">No review flags</p>
       <p className="text-xs text-muted-foreground">
         Flags appear here when the engine detects unusual adjustment patterns worth a look.

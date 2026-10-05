@@ -116,7 +116,7 @@ export function Topbar() {
               className={cn(
                 'relative size-9 shrink-0',
                 simulatedOffline &&
-                  'border-amber-500/50 bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300'
+                  'border-amber-500/50 bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300'
               )}
               onClick={() => setSimulatedOffline(!simulatedOffline)}
               aria-label="Simulate offline (airplane mode)"

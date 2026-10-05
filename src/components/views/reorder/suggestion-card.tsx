@@ -103,7 +103,7 @@ export function SuggestionCard({ suggestion }: { suggestion: ReorderSuggestionDT
               </div>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-semibold tracking-tight text-emerald-600 tabular">
+              <div className="text-2xl font-semibold tracking-tight text-emerald-700 dark:text-emerald-400 tabular">
                 Order {fmtQty(suggestion.suggestedQty, suggestion.unit)}
               </div>
               <div className="text-[11px] text-muted-foreground">
@@ -129,7 +129,7 @@ export function SuggestionCard({ suggestion }: { suggestion: ReorderSuggestionDT
             <StatChip
               label="Projected available"
               value={fmtQty(suggestion.projectedAvailable, suggestion.unit)}
-              valueClass={belowPoint ? 'text-amber-600' : 'text-emerald-600'}
+              valueClass={belowPoint ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}
             />
             <StatChip label="Reorder point" value={fmtQty(suggestion.reorderPoint, suggestion.unit)} />
             <StatChip label="Daily usage" value={fmtQty(suggestion.dailyUsage, `${suggestion.unit}/day`)} />
@@ -141,7 +141,7 @@ export function SuggestionCard({ suggestion }: { suggestion: ReorderSuggestionDT
                 Projected {fmtQty(suggestion.projectedAvailable, suggestion.unit)} vs reorder point{' '}
                 {fmtQty(suggestion.reorderPoint, suggestion.unit)}
               </span>
-              <span className={cn('font-semibold tabular', belowPoint ? 'text-amber-600' : 'text-emerald-600')}>
+              <span className={cn('font-semibold tabular', belowPoint ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400')}>
                 {reorderRatio}% covered
               </span>
             </div>
@@ -241,7 +241,7 @@ function StatChip({ label, value, valueClass }: { label: string; value: string; 
 export function SuggestionsEmptyState() {
   return (
     <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-12 text-center">
-      <Check className="size-6 text-emerald-600" aria-hidden="true" />
+      <Check className="size-6 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
       <p className="text-sm font-medium">No reorder suggestions — all stock is above its reorder point 🎉</p>
       <p className="text-xs text-muted-foreground">
         The engine re-checks projected available stock against reorder points on every visit.

@@ -16,7 +16,7 @@ const SEVERITY_ORDER: Record<AttentionDTO['items'][number]['severity'], number> 
 const SEVERITY_CIRCLE: Record<string, string> = {
   red: 'bg-red-500/10 text-red-600 dark:text-red-400',
   orange: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
-  green: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  green: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
 }
 
 /**
@@ -32,7 +32,7 @@ export function AttentionList({ attention }: { attention: AttentionDTO }) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center">
-        <PartyPopper className="size-6 text-emerald-600" aria-hidden="true" />
+        <PartyPopper className="size-6 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
         <p className="text-sm font-medium">Nothing needs attention — all clear 🎉</p>
         <p className="text-xs text-muted-foreground">
           Stock levels, approvals, receipts and counts are all in a healthy state.

@@ -217,7 +217,7 @@ export function DeliveryDetailDialog({
                       {line.qty} {line.unit}
                     </TableCell>
                     <TableCell className="text-right tabular">{line.pickedQty ?? '—'}</TableCell>
-                    <TableCell className={cn('text-right tabular', short && 'font-medium text-amber-600')}>
+                    <TableCell className={cn('text-right tabular', short && 'font-medium text-amber-700 dark:text-amber-400')}>
                       {line.availableAtLocation}
                       {short && <span className="ml-1 whitespace-nowrap">⚠ short</span>}
                     </TableCell>

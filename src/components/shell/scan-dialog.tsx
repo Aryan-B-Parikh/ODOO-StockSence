@@ -532,7 +532,7 @@ export function ScanDialog() {
                   role="status"
                   className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-muted/40 px-6 text-center"
                 >
-                  <span className="flex size-11 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                  <span className="flex size-11 items-center justify-center rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400">
                     <CameraOff className="size-5" aria-hidden="true" />
                   </span>
                   <p className="text-sm font-medium">Camera unavailable</p>

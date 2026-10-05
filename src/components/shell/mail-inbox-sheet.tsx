@@ -121,7 +121,7 @@ export function MailInboxSheet({
         <SheetHeader className="p-4 border-b bg-muted/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
                 <Mail className="size-4" />
               </span>
               <div>
@@ -217,7 +217,7 @@ export function MailInboxSheet({
                     <button
                       type="button"
                       onClick={() => setExpandedId(isExpanded ? null : e.id)}
-                      className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 hover:underline cursor-pointer"
+                      className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-1 hover:underline cursor-pointer"
                     >
                       {isExpanded ? (
                         <>

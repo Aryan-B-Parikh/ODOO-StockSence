@@ -110,9 +110,9 @@ export function MetricsPanel({ metrics }: { metrics: Metrics }) {
                         className={
                           'flex size-7 shrink-0 items-center justify-center rounded-md ' +
                           (item.tone === 'good'
-                            ? 'bg-emerald-500/10 text-emerald-600'
+                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                             : item.tone === 'warn'
-                              ? 'bg-amber-500/10 text-amber-600'
+                              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
                               : item.tone === 'bad'
                                 ? 'bg-red-500/10 text-red-600'
                                 : 'bg-muted text-muted-foreground')
@@ -125,7 +125,7 @@ export function MetricsPanel({ metrics }: { metrics: Metrics }) {
                     <p
                       className={
                         'text-2xl font-semibold tabular-nums tracking-tight ' +
-                        (item.tone === 'bad' ? 'text-red-600' : item.tone === 'good' ? 'text-emerald-600' : 'text-foreground')
+                        (item.tone === 'bad' ? 'text-red-600' : item.tone === 'good' ? 'text-emerald-700 dark:text-emerald-400' : 'text-foreground')
                       }
                     >
                       {item.value}

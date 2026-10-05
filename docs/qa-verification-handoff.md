@@ -193,17 +193,18 @@ graded HIGH rather than CRITICAL. Do not upgrade it without new throughput evide
 
 ```markdown
 ## Testing (QA)
-- `npm test` does NOT exist. There is no test runner on this branch. Do not claim
-  "tests pass" — state exactly which command you ran and what it proved.
-- Never treat `node test_mail_usecases.mjs` exiting 0 as evidence: it has no assertions
-  and reports PASSED for HTTP 404 (QA-001).
+- **Superseded — `npm test` now exists** (Node's built-in `node:test`, zero new deps).
+  Suites: `tests/unit/` (16) and `tests/e2e/` (38), plus `npm run test:mail` (24 checks).
+- Still true: do not claim "tests pass" — state exactly which command you ran and what
+  it proved. Never cite a process exit code without reading its output.
 - Baseline before and after any change: `npm run lint`, `npx tsc --noEmit`,
-  `npm run audit:a11y`, `npm run build`.
-  - lint → must be 0 errors.
-  - tsc → 3 known errors are pre-existing (QA-011); do not add new ones.
-  - build → look for `✓ Compiled successfully`; exit 1 is the Windows `cp`, not a failure.
-- `worklog.md` says "Do NOT write test files" (line 15). Until that rule is revisited,
-  keep verification scripts outside the repo; document how to re-run them.
+  `npm run audit:a11y`, `npm run build`, `npm test`, `npm run test:e2e`.
+  - lint → must be 0 errors (3 warnings are pre-existing, in `login-view.tsx`).
+  - tsc → **exit 0** now; do not add errors (QA-011 is fixed).
+  - build → **exit 0** now (QA-012 is fixed).
+  - e2e needs the dev server on :3000 and must run with `--test-concurrency=1`.
+- `worklog.md` line 15 ("Do NOT write test files") is **overridden** for the verification
+  role by an appended correction record. Do not delete the tests to satisfy it.
 
 ## When touching the inventory engine
 - Every quantity change MUST go through `bumpStock` inside `db.$transaction`.
@@ -240,7 +241,7 @@ execution (report §28).** Status after remediation: 8 RESOLVED · 3 PARTIAL · 
 | Pri | QA-ID | One-line fix | Status |
 |---|---|---|---|
 | P0 | QA-001 | Give the E2E script real assertions + non-zero exit on failure; target `/`, not `/login` | **RESOLVED** — 24 checks, exit 1 on failure |
-| P0 | QA-002 | Add a test runner + `test` script + CI; revisit `worklog.md:15` | **PARTIAL** — `node:test` + 50 tests; CI still absent |
+| P0 | QA-002 | Add a test runner + `test` script + CI; revisit `worklog.md:15` | **PARTIAL** — `node:test` + 54 tests; CI still absent |
 | P1 | QA-003 | `crypto.randomInt(100000, 1000000)` | **RESOLVED** |
 | P1 | QA-004 | Attempt counter in `otp-store` + rate limit; invalidate after N misses | **RESOLVED** — 5 attempts → destroy → 429 |
 | P2 | QA-005 | Gate `debugOtp` on an explicit opt-in var, not `NODE_ENV` | **RESOLVED** — `OTP_DEBUG=1` |

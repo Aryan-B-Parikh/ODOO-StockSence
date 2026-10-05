@@ -643,6 +643,29 @@ resolved files against `process.cwd()` instead of `ROOT`, so it silently
 reported 100% opacity when invoked from another directory. All file reads now
 resolve against `ROOT`.
 
+**Provenance note — the guard was lost and reconstructed (2026-10-05).**
+`scripts/audit-a11y.mjs` was never committed and vanished from the working tree
+during a branch switch; it was confirmed unrecoverable (not in `git log --all`,
+not in any dangling object, not on disk). It was rebuilt from this section plus
+`docs/ux-accessibility-manifest.json`. The structure above is preserved exactly
+(44 + 13 + 13 = 70 checks, same IDs), but **section 2's membership was re-derived
+from current source and is a reconstruction decision, not a recovered one.**
+
+Re-running the rebuilt guard surfaced **7 results**, which were triaged rather
+than tuned: 2 were **withdrawn as errors in my own reconstruction** (a 3:1
+assertion on the decorative `--border` token — not a WCAG 1.4.11 subject; the
+control-boundary token `--input`, which is, passes) and 5 were **real defects in
+code written after this audit** — pale chart series on the white card (2.20:1,
+2.06:1), `text-emerald-600` / `text-amber-600` used for normal-size text (3.57:1,
+3.05:1), and the mail templates' `<th>` elements shipping without `scope`.
+
+All 5 were fixed in source (chart tokens darkened; 48 label sites moved to
+`-700` with explicit `dark:` variants; `scope="col"` on 7 headers), and the two
+withdrawn assertions were replaced with a stricter check than the one they
+displaced. No threshold was raised to match a failing value. The guard now also
+*forbids* the two retired colour shades, so reverting a fix fails the check
+instead of reading as a deletion. **Current result: 70/70, exit 0.**
+
 ---
 
 ## 6. WCAG 2.1 Level AA — conformance position

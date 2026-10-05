@@ -68,8 +68,12 @@
   --ring: oklch(0.5305 0.144 163.5);
   --chart-1: oklch(0.596 0.145 163);
   --chart-2: oklch(0.637 0.194 25.7);
-  --chart-3: oklch(0.73 0.143 184.7);
-  --chart-4: oklch(0.78 0.163 70.6);
+  /* UX-032/UX-033: light chart series sit on a pure-white card, so 0.73/0.78
+     only reached 2.20:1 and 2.06:1 (WCAG 1.4.11 needs 3:1 for a graphical
+     object you must read). Darkened to 3.11:1 and 3.10:1, chroma+hue kept, so
+     the series stay recognisably teal/amber. Dark theme is unaffected below. */
+  --chart-3: oklch(0.632 0.143 184.7);
+  --chart-4: oklch(0.668 0.163 70.6);
   --chart-5: oklch(0.55 0.02 165);
   --sidebar: oklch(0.985 0.003 170);
   --sidebar-foreground: oklch(0.155 0.012 165);

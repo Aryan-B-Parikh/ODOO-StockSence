@@ -68,8 +68,8 @@ export function lowStockTemplate(params: {
     <table>
       <thead>
         <tr>
-          <th>Metric</th>
-          <th style="text-align: right;">Quantity</th>
+          <th scope="col">Metric</th>
+          <th scope="col" style="text-align: right;">Quantity</th>
         </tr>
       </thead>
       <tbody>
@@ -133,8 +133,8 @@ export function deliveryDispatchTemplate(params: {
     <table>
       <thead>
         <tr>
-          <th>Item Details</th>
-          <th style="text-align: right;">Quantity</th>
+          <th scope="col">Item Details</th>
+          <th scope="col" style="text-align: right;">Quantity</th>
         </tr>
       </thead>
       <tbody>
@@ -177,9 +177,9 @@ export function goodsReceiptTemplate(params: {
     <table>
       <thead>
         <tr>
-          <th>Product / SKU</th>
-          <th style="text-align: right;">Expected</th>
-          <th style="text-align: right;">Received</th>
+          <th scope="col">Product / SKU</th>
+          <th scope="col" style="text-align: right;">Expected</th>
+          <th scope="col" style="text-align: right;">Received</th>
         </tr>
       </thead>
       <tbody>

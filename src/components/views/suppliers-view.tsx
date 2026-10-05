@@ -143,7 +143,7 @@ export function SuppliersView() {
                 label="Avg lead time"
                 value={`${Number(summary.avgLead.toFixed(1))}d`}
                 icon={<Truck className="size-3.5" />}
-                iconClass="bg-amber-500/10 text-amber-600"
+                iconClass="bg-amber-500/10 text-amber-700 dark:text-amber-400"
               />
             </motion.div>
             <motion.div variants={fadeUp}>
@@ -151,7 +151,7 @@ export function SuppliersView() {
                 label="Linked products"
                 value={String(summary.linkCount)}
                 icon={<Link2 className="size-3.5" />}
-                iconClass="bg-emerald-500/10 text-emerald-600"
+                iconClass="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
               />
             </motion.div>
             <motion.div variants={fadeUp}>

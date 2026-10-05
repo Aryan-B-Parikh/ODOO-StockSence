@@ -76,7 +76,7 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           value={fmtUSDCompact(kpis.totalStockValue)}
           sub={<span>{kpis.skuCount} active SKUs</span>}
           icon={<Package className="size-3.5" />}
-          iconClass="bg-emerald-500/10 text-emerald-600"
+          iconClass="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
           tone="emerald"
         />
       </motion.div>
@@ -119,7 +119,7 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           value={String(kpis.expectedReceipts)}
           sub={<span>{kpis.pendingAdjustments} adjustments pending approval</span>}
           icon={<Truck className="size-3.5" />}
-          iconClass="bg-amber-500/10 text-amber-600"
+          iconClass="bg-amber-500/10 text-amber-700 dark:text-amber-400"
           tone="amber"
         />
       </motion.div>
@@ -129,10 +129,10 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           label="Low Stock"
           value={String(kpis.lowStockCount)}
           sub={<span>below reorder point</span>}
-          valueClass={lowStock ? 'text-amber-600 dark:text-amber-400' : undefined}
+          valueClass={lowStock ? 'text-amber-700 dark:text-amber-400' : undefined}
           icon={<AlertTriangle className="size-3.5" />}
           iconClass={
-            lowStock ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600'
+            lowStock ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
           }
           tone={lowStock ? 'amber' : 'emerald'}
         />
@@ -145,7 +145,7 @@ export function KpiCards({ kpis }: { kpis: Kpis }) {
           sub={<span>at/below safety stock</span>}
           valueClass={stockout ? 'text-red-600 dark:text-red-400' : undefined}
           icon={<OctagonX className="size-3.5" />}
-          iconClass={stockout ? 'bg-red-500/10 text-red-600' : 'bg-emerald-500/10 text-emerald-600'}
+          iconClass={stockout ? 'bg-red-500/10 text-red-600' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'}
           tone={stockout ? 'red' : 'emerald'}
         />
       </motion.div>

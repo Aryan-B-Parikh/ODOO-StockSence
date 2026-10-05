@@ -19,11 +19,11 @@ The remaining unmet criterion is #12, blocked by BLK-02.
 | `npm run build` | **exit 0** |
 | `npm test` | exit 0 — **16/16** (unit) |
 | `npm run test:e2e` | exit 0 — **38/38** (contract, auth, permissions, negative, delivery + transfer concurrency) |
-| `npm run test:mail` | exit 0 — **24 passed, 0 failed, 2 skipped** |
+| `npm run test:mail` | exit 0 — **27 passed, 0 failed, 2 skipped** (3 of them the new SEC-001 anonymous-caller checks) |
 | `npm run test:coverage` | exit 0 — `--experimental-test-coverage` works; reports 100% of the source files the unit tests actually load (not app-wide) |
 | `bash tests/*.sh` (×3) | exit 0 — **SKIP** (`verified NOTHING`, QA-009) |
 
-**148 checks executed, 0 failures.** (16 + 38 + 24 + 70.)
+**151 checks executed, 0 failures.** (16 + 38 + 27 + 70.)
 
 ## Completion criteria (§45)
 
@@ -50,7 +50,7 @@ add up. Corrected here and in the report.)*
 
 | ID | Type | Status |
 |---|---|---|
-| BLK-01 | VALIDATION — no test framework / `test` script / CI | **PARTIAL**: runner + 50 tests exist; CI still absent |
+| BLK-01 | VALIDATION — no test framework / `test` script / CI | **PARTIAL**: runner + 54 tests exist; CI still absent |
 | BLK-02 | SCOPE — requirements/AC document not in the repo | OPEN. `docs/acceptance-criteria.md` is *derived* and provisional |
 | BLK-03 | IMPLEMENTATION — `tests/*.sh` unrunnable, `.zscripts` missing | OPEN. Now skips loudly instead of dying |
 | BLK-04 | VALIDATION — AC-06 needs a destructive re-seed | OPEN. Needs a non-destructive fixture path |

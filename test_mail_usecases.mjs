@@ -190,13 +190,28 @@ async function main() {
   // 8. In-memory mail inbox.
   console.log('\n--- Mail inbox ---');
   await new Promise((r) => setTimeout(r, 1000)); // fire-and-forget dispatch
-  const inbox = await call('GET', '/api/mail/inbox');
+  const inbox = await call('GET', '/api/mail/inbox', { cookie });
   check(inbox.status === 200, 'GET /api/mail/inbox → 200', `status=${inbox.status}`);
   const count = inbox.json?.count;
   check(typeof count === 'number' && count >= 1, 'inbox contains dispatched emails', `count=${count}`);
   (inbox.json?.emails || []).slice(0, 5).forEach((e, i) => {
     console.log(`    [${i + 1}] To: ${e.to} | Subject: ${e.subject}`);
   });
+
+  // 9. SEC-001 / ARCH-001 regression guard (CRITICAL, fixed 2026-10-05).
+  // These three routes previously ran with no auth gate, so an anonymous caller
+  // could read password-reset OTP codes from the inbox — a full account-takeover
+  // chain — and could trigger outbound mail at will. Never let that regress.
+  console.log('\n--- SEC-001: mail routes must reject anonymous callers ---');
+  const gated = [
+    ['GET', '/api/mail/inbox'],
+    ['POST', '/api/mail/digest'],
+    ['POST', '/api/mail/low-stock'],
+  ];
+  for (const [method, path] of gated) {
+    const anon = await call(method, path);
+    check(anon.status === 401, `${method} ${path} → 401 without a session`, `status=${anon.status}`);
+  }
 }
 
 main()
