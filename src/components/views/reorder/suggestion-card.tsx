@@ -165,7 +165,7 @@ export function SuggestionCard({ suggestion }: { suggestion: ReorderSuggestionDT
                   Dismiss
                 </Button>
                 <Button
-                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  className="bg-emerald-700 text-white hover:bg-emerald-800"
                   onClick={() => setAcceptOpen(true)}
                   disabled={acceptMutation.isPending}
                 >
@@ -195,7 +195,7 @@ export function SuggestionCard({ suggestion }: { suggestion: ReorderSuggestionDT
           <AlertDialogFooter>
             <AlertDialogCancel>Not now</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              className="bg-emerald-700 text-white hover:bg-emerald-800"
               onClick={(e) => {
                 e.preventDefault()
                 acceptMutation.mutate()

@@ -50,11 +50,14 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Zoom must stay enabled — WCAG 1.4.4 (Resize Text) forbids disabling
+ * user scaling, and warehouse staff routinely pinch-zoom barcode/lot numbers.
+ * `initialScale: 1` only controls the load-time scale.
+ */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: dark)", color: "#0c1210" },

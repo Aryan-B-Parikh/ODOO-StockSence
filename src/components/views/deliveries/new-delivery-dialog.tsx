@@ -145,10 +145,13 @@ export function NewDeliveryDialog({ open, onOpenChange }: { open: boolean; onOpe
               onBlur={() => setCustomerTouched(true)}
               placeholder="e.g. GreenField Retail"
               aria-invalid={customerIssue !== null && customerTouched}
+              aria-describedby={customerIssue && customerTouched ? 'delivery-customer-error' : undefined}
               required
             />
             {customerIssue && customerTouched && (
-              <p className="text-xs font-medium text-red-600">{customerIssue}</p>
+              <p id="delivery-customer-error" role="alert" className="text-xs font-medium text-red-600">
+                {customerIssue}
+              </p>
             )}
           </div>
           <div className="space-y-1.5">
@@ -228,6 +231,7 @@ export function NewDeliveryDialog({ open, onOpenChange }: { open: boolean; onOpe
                       onChange={(e) => updateLine(line.key, { qty: e.target.value })}
                       placeholder="0"
                       aria-invalid={state.kind === 'over'}
+                      aria-describedby={`qty-${line.key}-hint`}
                     />
                   </div>
                   <Button
@@ -243,7 +247,9 @@ export function NewDeliveryDialog({ open, onOpenChange }: { open: boolean; onOpe
                   </Button>
                 </div>
 
-                <LineHint state={state} unit={unit} available={available} />
+                <div id={`qty-${line.key}-hint`}>
+                  <LineHint state={state} unit={unit} available={available} />
+                </div>
               </div>
             )
           })}

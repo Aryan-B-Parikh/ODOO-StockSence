@@ -273,7 +273,7 @@ export function DeliveryDetailDialog({
             {showPack && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button className="bg-amber-600 text-white hover:bg-amber-700" disabled={pending}>
+                  <Button className="bg-amber-700 text-white hover:bg-amber-800" disabled={pending}>
                     {pending ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                     ) : (
@@ -293,7 +293,7 @@ export function DeliveryDetailDialog({
                   <AlertDialogFooter>
                     <AlertDialogCancel>Not yet</AlertDialogCancel>
                     <AlertDialogAction
-                      className="bg-amber-600 text-white hover:bg-amber-700"
+                      className="bg-amber-700 text-white hover:bg-amber-800"
                       onClick={() => act.mutate('pack')}
                     >
                       Pack order

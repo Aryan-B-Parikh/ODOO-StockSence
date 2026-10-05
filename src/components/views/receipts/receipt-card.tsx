@@ -31,7 +31,7 @@ export function ReceiptCard({
           onOpen()
         }
       }}
-      className="cursor-pointer gap-0 py-0 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-sm focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+      className="cursor-pointer gap-0 py-0 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-sm focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
     >
       <CardContent className="p-4">
         <div className="flex items-center gap-2">

@@ -37,6 +37,8 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "// Standalone demo with its own third-party dependency (socket.io), not installed",
+    "examples"
   ]
 }

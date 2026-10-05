@@ -514,3 +514,55 @@ Work Log:
   8. Configured Capacitor (capacitor.config.json) and package scripts (mobile:icons, mobile:init, mobile:android, mobile:open) for native Android APK and iOS builds.
   9. Created MOBILE_APP_GUIDE.md documentation.
 - Ran eslint across the entire workspace: 0 errors, 0 warnings.
+
+---
+
+## QA CORRECTION RECORD — 2026-10-05 (QA & Verification Engineer)
+
+> Appended per the rule at line 18 (append, never overwrite). The original text above
+> is left intact as history; the figures it states are stale.
+
+**1. The "SEEDED DATA SNAPSHOT" (lines 20-30) is stale — QA-008.**
+`prisma/seed.ts` is authoritative for what the seed CREATES; the live database is
+authoritative for current state. Do not quote lines 20-30 as current state.
+
+| Figure (lines 20-30) | Stated | Actual |
+|---|---|---|
+| Shelf locations | 17 | **16** (`seed.ts:84-89`) |
+| SKUs | 20 | **19** (`seed.ts:106-124`) |
+| Ledger entries | 88 | grows with every change (101 at audit time) |
+
+`seed.ts:311` does create a delayed receipt in `EXPECTED`, but all receipts had been
+walked to `RECEIVED` by audit time, so `delayedReceipts: 0` was CORRECT behaviour, not
+a defect. Reproducing the exact snapshot requires `bun prisma/seed.ts`, which **wipes
+the database** — hence QA acceptance item AC-06 is `BLOCKED`, never `PASSED`.
+
+**2. "Do NOT write test files" (line 15) is superseded for the QA / verification role.**
+The owner explicitly delegated the fix for QA-002 (CRITICAL: no test framework, no
+`test` script, no CI). Test files now exist and are the intended regression guard:
+
+| Command | Scope | Needs server |
+|---|---|---|
+| `npm test` | unit — ledger invariants + OTP attempt limiting | no |
+| `npm run test:e2e` | API contract / auth / permissions / negative / concurrency | yes |
+| `npm run test:mail` | the 5 documented mail use cases (now assert-backed) | yes |
+| `npm run audit:a11y` | 70 accessibility checks | no |
+
+Tests live in `tests/unit/` and `tests/e2e/`. The three `tests/*.sh` deployment scripts
+now **SKIP loudly** because `.zscripts/` was never committed to this repository
+(QA-009) — they verify NOTHING until that directory is vendored. A SKIP is not a PASS.
+
+**3. The requirements document is absent — QA-010.** Line 4 names a
+"IMPLEMENTATION PLAN - REVISED" that is not present in the repo. The acceptance criteria
+in `docs/acceptance-criteria.md` are **DERIVED** from `worklog.md` + `prisma/seed.ts` +
+the implementation. If the original plan surfaces, reconcile against it and record any
+contradiction rather than editing either silently.
+
+**4. The build is now cross-platform — QA-012.** The `build` script no longer shells
+out to `cp` (POSIX-only); it runs `scripts/copy-standalone.mjs`.
+
+**5. Security fixes landed in the in-flight mail/OTP work (QA-003..007):** OTP codes now
+come from `crypto.randomInt` (CSPRNG); verification is attempt-limited and the code is
+destroyed after 5 wrong guesses (429); `debugOtp` requires `OTP_DEBUG=1` rather than
+`NODE_ENV`; known/unknown accounts return identical responses; both routes return the
+generic `Internal error` body.

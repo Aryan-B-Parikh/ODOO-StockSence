@@ -122,12 +122,16 @@ function NewCountForm({ onDone }: { onDone: () => void }) {
                 scope === 'LOCATION' ? 'border-primary/50 bg-primary/5' : 'hover:bg-accent/50'
               )}
             >
-              <RadioGroupItem value="LOCATION" className="mt-0.5" />
+              <RadioGroupItem
+                value="LOCATION"
+                aria-labelledby="count-scope-location count-scope-location-desc"
+                className="mt-0.5"
+              />
               <span className="space-y-0.5">
-                <span className="flex items-center gap-1.5 text-sm font-medium">
+                <span id="count-scope-location" className="flex items-center gap-1.5 text-sm font-medium">
                   <MapPin className="size-3.5 text-teal-600" aria-hidden="true" /> Location
                 </span>
-                <span className="block text-[11px] leading-snug text-muted-foreground">
+                <span id="count-scope-location-desc" className="block text-[11px] leading-snug text-muted-foreground">
                   Every product on one shelf
                 </span>
               </span>
@@ -138,12 +142,16 @@ function NewCountForm({ onDone }: { onDone: () => void }) {
                 scope === 'PRODUCT' ? 'border-primary/50 bg-primary/5' : 'hover:bg-accent/50'
               )}
             >
-              <RadioGroupItem value="PRODUCT" className="mt-0.5" />
+              <RadioGroupItem
+                value="PRODUCT"
+                aria-labelledby="count-scope-product count-scope-product-desc"
+                className="mt-0.5"
+              />
               <span className="space-y-0.5">
-                <span className="flex items-center gap-1.5 text-sm font-medium">
+                <span id="count-scope-product" className="flex items-center gap-1.5 text-sm font-medium">
                   <Package className="size-3.5 text-teal-600" aria-hidden="true" /> Product
                 </span>
-                <span className="block text-[11px] leading-snug text-muted-foreground">
+                <span id="count-scope-product-desc" className="block text-[11px] leading-snug text-muted-foreground">
                   One SKU across the warehouse
                 </span>
               </span>

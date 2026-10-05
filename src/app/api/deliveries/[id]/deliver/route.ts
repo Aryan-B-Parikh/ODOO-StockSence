@@ -5,6 +5,7 @@ import { HttpError } from '@/lib/http'
 import { markDeliveryDelivered } from '@/lib/inventory'
 import { DELIVERY_INCLUDE, toDeliveryDTO } from '@/lib/mappers'
 import { fetchStockMap, numericParam } from '@/app/api/_lib/route-helpers'
+import { triggerDeliveryDispatch } from '@/lib/mail/triggers'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,10 @@ export async function POST(_req: Request, ctx: Ctx) {
       db.deliveryOrder.findUnique({ where: { id }, include: DELIVERY_INCLUDE }),
       fetchStockMap(),
     ])
+
+    // UC-3 & UC-1: Dispatch Customer Packing Slip & check if remaining stock triggered reorder point
+    triggerDeliveryDispatch(id).catch((err) => console.error('[mail] Delivery dispatch notification failed:', err))
+
     return NextResponse.json({ delivery: toDeliveryDTO(row, stockMap) })
   } catch (e) {
     if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status })

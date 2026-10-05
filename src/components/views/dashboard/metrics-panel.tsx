@@ -120,7 +120,7 @@ export function MetricsPanel({ metrics }: { metrics: Metrics }) {
                       >
                         <Icon className="size-3.5" aria-hidden="true" />
                       </span>
-                      <p className="truncate text-xs font-medium text-muted-foreground">{item.title}</p>
+                      <p id={`metric-${item.key}-title`} className="truncate text-xs font-medium text-muted-foreground">{item.title}</p>
                     </div>
                     <p
                       className={
@@ -131,7 +131,7 @@ export function MetricsPanel({ metrics }: { metrics: Metrics }) {
                       {item.value}
                     </p>
                     {item.progress != null && (
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={item.progress} aria-valuemin={0} aria-valuemax={100}>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-labelledby={`metric-${item.key}-title`} aria-valuenow={item.progress} aria-valuemin={0} aria-valuemax={100}>
                         <div
                           className={
                             'h-full rounded-full ' +

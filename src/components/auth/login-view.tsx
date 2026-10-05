@@ -2,13 +2,20 @@
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { motion } from 'framer-motion'
-import { Loader2, LockKeyhole, LogIn, Mail, Package, ShieldCheck, User, WifiOff } from 'lucide-react'
-import { useEffect } from 'react'
+import { CheckCircle2, KeyRound, Loader2, LockKeyhole, LogIn, Mail, Package, ShieldCheck, User, WifiOff } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiError, OfflineError } from '@/lib/api'
@@ -92,11 +99,93 @@ export function LoginView() {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
   })
+
+  // ── Password reset with OTP state ──
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetOtp, setResetOtp] = useState('')
+  const [resetNewPassword, setResetNewPassword] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpLoading, setOtpLoading] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
+  const [debugOtp, setDebugOtp] = useState<string | null>(null)
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resetEmail || !resetEmail.includes('@')) {
+      toast.error('Please enter a valid email address')
+      return
+    }
+    setOtpLoading(true)
+    try {
+      const res = await fetch('/api/auth/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to dispatch OTP')
+      setOtpSent(true)
+      if (data.debugOtp) setDebugOtp(data.debugOtp)
+      toast.success('Verification code dispatched', {
+        description: 'Check your email inbox for the 6-digit OTP code.',
+      })
+    } catch (err: unknown) {
+      toast.error('Dispatch failed', {
+        description: err instanceof Error ? err.message : 'Unable to dispatch code',
+      })
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resetOtp || resetOtp.length < 6) {
+      toast.error('Please enter the 6-digit verification code')
+      return
+    }
+    if (!resetNewPassword || resetNewPassword.length < 8) {
+      toast.error('New password must be at least 8 characters long')
+      return
+    }
+    setResetLoading(true)
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: resetEmail,
+          otp: resetOtp,
+          newPassword: resetNewPassword,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Password reset failed')
+      toast.success('Password updated successfully', {
+        description: 'You can now sign in with your new password.',
+      })
+      setValue('email', resetEmail)
+      setValue('password', resetNewPassword)
+      setForgotOpen(false)
+      setOtpSent(false)
+      setResetOtp('')
+      setResetNewPassword('')
+      setDebugOtp(null)
+    } catch (err: unknown) {
+      toast.error('Reset failed', {
+        description: err instanceof Error ? err.message : 'Invalid or expired code',
+      })
+    } finally {
+      setResetLoading(false)
+    }
+  }
 
   const onSubmit = async (values: LoginValues) => {
     try {
@@ -295,7 +384,20 @@ export function LoginView() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const curr = watch('email')
+                    if (curr) setResetEmail(curr)
+                    setForgotOpen(true)
+                  }}
+                  className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <div className="relative">
                 <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -361,6 +463,126 @@ export function LoginView() {
           </p>
         </div>
       </motion.div>
+
+      {/* ── Password Reset with Email OTP Modal ── */}
+      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <KeyRound className="size-4.5" />
+              </span>
+              <div>
+                <DialogTitle className="text-base font-semibold">Password Recovery</DialogTitle>
+                <DialogDescription className="text-xs">
+                  {otpSent
+                    ? 'Enter the 6-digit verification code dispatched to your email.'
+                    : 'Dispatch a 6-digit OTP verification code to your registered email.'}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {!otpSent ? (
+            <form onSubmit={handleSendOtp} className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="reset-email" className="text-xs">Registered Email Address</Label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    placeholder="manager@stocksense.app"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    className="pl-9"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setForgotOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={otpLoading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                  {otpLoading ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" /> Dispatching…
+                    </>
+                  ) : (
+                    'Send Verification Code'
+                  )}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleResetPassword} className="space-y-4 pt-2">
+              <div className="rounded-lg bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2 border border-emerald-500/20">
+                <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  Verification code dispatched to <strong>{resetEmail}</strong>.
+                  {debugOtp && (
+                    <div className="mt-1 font-mono text-[11px] text-emerald-700 dark:text-emerald-300">
+                      Debug OTP: <span className="font-bold underline cursor-pointer" onClick={() => setResetOtp(debugOtp)}>{debugOtp}</span> (click to autofill)
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="otp-code" className="text-xs">6-Digit Verification Code (OTP)</Label>
+                <Input
+                  id="otp-code"
+                  type="text"
+                  maxLength={6}
+                  placeholder="348912"
+                  value={resetOtp}
+                  onChange={(e) => setResetOtp(e.target.value)}
+                  className="font-mono text-center tracking-widest text-lg"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="new-password" className="text-xs">New Password (min 8 chars)</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={resetNewPassword}
+                  onChange={(e) => setResetNewPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setOtpSent(false)}
+                  className="text-xs text-muted-foreground hover:underline"
+                >
+                  Resend code
+                </button>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setForgotOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="sm" disabled={resetLoading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                    {resetLoading ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" /> Updating…
+                      </>
+                    ) : (
+                      'Reset & Sign In'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }

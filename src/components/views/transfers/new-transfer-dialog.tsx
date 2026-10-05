@@ -224,7 +224,10 @@ export function NewTransferDialog({ open, onOpenChange }: { open: boolean; onOpe
           </div>
         </div>
         {routeIssue && (sameLocation || fromId != null || toId != null) && (
-          <p className={cn('text-xs', sameLocation ? 'font-medium text-red-600' : 'text-muted-foreground')}>
+          <p
+            role={sameLocation ? 'alert' : undefined}
+            className={cn('text-xs', sameLocation ? 'font-medium text-red-600' : 'text-muted-foreground')}
+          >
             {routeIssue}
           </p>
         )}
@@ -296,6 +299,7 @@ export function NewTransferDialog({ open, onOpenChange }: { open: boolean; onOpe
                       onChange={(e) => updateLine(line.key, { qty: e.target.value })}
                       placeholder="0"
                       aria-invalid={state.kind === 'over'}
+                      aria-describedby={`qty-${line.key}-hint`}
                     />
                   </div>
                   <Button
@@ -311,7 +315,9 @@ export function NewTransferDialog({ open, onOpenChange }: { open: boolean; onOpe
                   </Button>
                 </div>
 
-                <LineHint state={state} unit={unit} available={available} />
+                <div id={`qty-${line.key}-hint`}>
+                  <LineHint state={state} unit={unit} available={available} />
+                </div>
               </div>
             )
           })}

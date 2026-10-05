@@ -49,11 +49,14 @@ function fillStyle(rack: Rack): React.CSSProperties {
 function QrSticker({ seed, onClick }: { seed: string; onClick?: () => void }) {
   const svg = generateQrSvg(seed, { margin: 1 })
   return (
-    <div
+    // <button> rather than a clickable <div role="img">: the sticker opens a
+    // dialog, so it must be reachable with Tab and operable with Enter/Space
+    // (WCAG 2.1.1), and its role must not claim to be a static image (4.1.2).
+    <button
+      type="button"
       onClick={onClick}
-      className="size-10 shrink-0 overflow-hidden rounded-[5px] bg-white p-0.5 shadow-sm ring-1 ring-border/80 transition-transform hover:scale-110 cursor-pointer"
-      role="img"
-      aria-label={`QR location label ${seed}`}
+      className="size-10 shrink-0 cursor-pointer overflow-hidden rounded-[5px] bg-white p-0.5 shadow-sm ring-1 ring-border/80 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      aria-label={`Enlarge QR location label ${seed}`}
       title={`Click to enlarge / scan QR: ${seed}`}
       dangerouslySetInnerHTML={{ __html: svg }}
     />

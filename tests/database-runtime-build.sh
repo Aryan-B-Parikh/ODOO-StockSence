@@ -2,6 +2,12 @@
 
 set -euo pipefail
 
+if [ ! -d "$(cd "$(dirname "$0")/.." && pwd)/.zscripts" ]; then
+    echo "SKIP: $(basename "$0") cannot run — .zscripts/ is not present in this repository." >&2
+    echo "      The deployment build script under test was never committed, so this test" >&2
+    echo "      verified NOTHING. Vendor .zscripts/ to enable it. See QA-009." >&2
+    exit 0
+fi
 SCRIPT_DIR="$(cd "$(dirname "$0")/../.zscripts" && pwd)"
 TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEST_ROOT"' EXIT

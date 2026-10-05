@@ -26,6 +26,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -52,7 +53,7 @@
   --card-foreground: oklch(0.155 0.012 165);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.155 0.012 165);
-  --primary: oklch(0.558 0.144 163.5);
+  --primary: oklch(0.5305 0.144 163.5);
   --primary-foreground: oklch(0.985 0.002 165);
   --secondary: oklch(0.958 0.006 165);
   --secondary-foreground: oklch(0.205 0.012 165);
@@ -60,10 +61,11 @@
   --muted-foreground: oklch(0.52 0.012 165);
   --accent: oklch(0.945 0.015 165);
   --accent-foreground: oklch(0.205 0.012 165);
-  --destructive: oklch(0.577 0.215 25.3);
+  --destructive: oklch(0.572 0.215 25.3);
+  --destructive-foreground: oklch(0.985 0.002 165);
   --border: oklch(0.9 0.008 165);
-  --input: oklch(0.9 0.008 165);
-  --ring: oklch(0.558 0.144 163.5);
+  --input: oklch(0.6375 0.008 165);
+  --ring: oklch(0.5305 0.144 163.5);
   --chart-1: oklch(0.596 0.145 163);
   --chart-2: oklch(0.637 0.194 25.7);
   --chart-3: oklch(0.73 0.143 184.7);
@@ -71,12 +73,12 @@
   --chart-5: oklch(0.55 0.02 165);
   --sidebar: oklch(0.985 0.003 170);
   --sidebar-foreground: oklch(0.155 0.012 165);
-  --sidebar-primary: oklch(0.558 0.144 163.5);
+  --sidebar-primary: oklch(0.5305 0.144 163.5);
   --sidebar-primary-foreground: oklch(0.985 0.002 165);
   --sidebar-accent: oklch(0.945 0.015 165);
   --sidebar-accent-foreground: oklch(0.205 0.012 165);
   --sidebar-border: oklch(0.9 0.008 165);
-  --sidebar-ring: oklch(0.558 0.144 163.5);
+  --sidebar-ring: oklch(0.5305 0.144 163.5);
 }
 
 .dark {
@@ -95,8 +97,9 @@
   --accent: oklch(0.24 0.012 168);
   --accent-foreground: oklch(0.95 0.005 165);
   --destructive: oklch(0.666 0.18 25.7);
+  --destructive-foreground: oklch(0.137 0.005 168);
   --border: oklch(0.985 0 0 / 9%);
-  --input: oklch(0.985 0 0 / 14%);
+  --input: oklch(0.985 0 0 / 38%);
   --ring: oklch(0.696 0.15 162.5);
   --chart-1: oklch(0.696 0.15 162.5);
   --chart-2: oklch(0.665 0.18 25.7);
@@ -115,7 +118,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   body {
     @apply bg-background text-foreground;
@@ -123,7 +126,7 @@
     -webkit-font-smoothing: antialiased;
   }
   ::selection {
-    background: color-mix(in oklab, oklch(0.558 0.144 163.5) 24%, transparent);
+    background: color-mix(in oklab, oklch(0.5305 0.144 163.5) 24%, transparent);
   }
   html {
     scroll-behavior: smooth;
@@ -132,10 +135,19 @@
     html {
       scroll-behavior: auto;
     }
+    /* Decorative / looping motion stops. `animate-spin` is deliberately kept:
+       it is the only affordance showing that an operation is in flight, so it
+       is "essential to the activity" and pausing it would remove information
+       rather than reduce discomfort. */
     .pulse-dot,
     .scanline,
-    .shimmer {
+    .shimmer,
+    .animate-pulse,
+    .animate-ping {
       animation: none;
+    }
+    .lift:hover {
+      transform: none;
     }
   }
 }
@@ -252,4 +264,16 @@
 }
 .lift:active {
   transform: translateY(0);
+}
+
+/* Clearance for the fixed mobile tab bar (h-16 + iOS safe-area inset).
+ * Without it the sticky bar covers the footer and the last rows of a view.
+ * `md` matches Tailwind's --breakpoint-md (48rem / 768px), where the bar hides. */
+.bottom-nav-space {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 48rem) {
+  .bottom-nav-space {
+    padding-bottom: 0;
+  }
 }

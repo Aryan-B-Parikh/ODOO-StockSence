@@ -119,7 +119,7 @@ export function MobileInstallBanner() {
           </Button>
           <Button
             size="sm"
-            className="h-7 gap-1.5 bg-emerald-600 text-xs font-medium text-white hover:bg-emerald-500"
+            className="h-7 gap-1.5 bg-emerald-700 text-xs font-medium text-white hover:bg-emerald-800"
             onClick={handleInstallClick}
           >
             <Download className="size-3.5" />

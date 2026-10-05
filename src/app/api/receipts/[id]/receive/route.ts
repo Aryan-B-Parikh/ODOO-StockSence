@@ -5,6 +5,7 @@ import { HttpError } from '@/lib/http'
 import { receiveReceipt } from '@/lib/inventory'
 import { RECEIPT_INCLUDE, toReceiptDTO } from '@/lib/mappers'
 import { numericParam, readJson, toNum } from '@/app/api/_lib/route-helpers'
+import { triggerGoodsReceiptNote } from '@/lib/mail/triggers'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,10 @@ export async function POST(req: Request, ctx: Ctx) {
     )
 
     const row = await db.receipt.findUnique({ where: { id }, include: RECEIPT_INCLUDE })
+
+    // UC-4: Asynchronously dispatch Vendor Goods Receipt Note (GRN)
+    triggerGoodsReceiptNote(id).catch((err) => console.error('[mail] GRN notification failed:', err))
+
     return NextResponse.json({ receipt: toReceiptDTO(row) })
   } catch (e) {
     if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status })

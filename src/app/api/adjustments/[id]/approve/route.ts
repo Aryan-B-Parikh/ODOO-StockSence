@@ -5,6 +5,7 @@ import { HttpError } from '@/lib/http'
 import { approveAdjustment } from '@/lib/inventory'
 import { ADJUSTMENT_INCLUDE, toAdjustmentDTO } from '@/lib/mappers'
 import { fetchUserNameMap, numericParam } from '@/app/api/_lib/route-helpers'
+import { triggerLowStockCheck } from '@/lib/mail/triggers'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,11 @@ export async function POST(_req: Request, ctx: Ctx) {
     await db.$transaction((tx) => approveAdjustment(tx, id, user.id))
     const row = await db.adjustment.findUnique({ where: { id }, include: ADJUSTMENT_INCLUDE })
     if (!row) throw new HttpError(404, 'Adjustment not found')
+
+    // UC-1: Check if any adjusted products reached low-stock threshold
+    const productIds = row.lines.map((l) => l.productId)
+    triggerLowStockCheck(productIds).catch((err) => console.error('[mail] Low-stock alert failed:', err))
+
     const userNames = await fetchUserNameMap([row.createdBy, row.approvedBy])
     return NextResponse.json({ adjustment: toAdjustmentDTO(row, userNames) })
   } catch (e) {

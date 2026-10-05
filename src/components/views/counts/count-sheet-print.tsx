@@ -85,14 +85,14 @@ export function CountSheetPrint({
       <table>
         <thead>
           <tr>
-            <th className="ps-col-check">✓</th>
-            <th className="ps-col-sku">SKU</th>
-            <th>Product</th>
-            <th>Location</th>
-            <th className="ps-col-unit">Unit</th>
-            {hideSystemQty ? null : <th className="ps-col-system">System qty</th>}
-            <th className="ps-col-counted">Counted</th>
-            <th className="ps-col-variance">Variance</th>
+            <th scope="col" className="ps-col-check">✓</th>
+            <th scope="col" className="ps-col-sku">SKU</th>
+            <th scope="col">Product</th>
+            <th scope="col">Location</th>
+            <th scope="col" className="ps-col-unit">Unit</th>
+            {hideSystemQty ? null : <th scope="col" className="ps-col-system">System qty</th>}
+            <th scope="col" className="ps-col-counted">Counted</th>
+            <th scope="col" className="ps-col-variance">Variance</th>
           </tr>
         </thead>
         <tbody>

@@ -65,10 +65,19 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+function TableHead({
+  className,
+  // Column headers must declare their scope so screen readers can announce
+  // the header for each data cell (WCAG 1.3.1). Every <TableHead> in this app
+  // renders inside <TableHeader>/<thead>, so "col" is the right default; pass
+  // scope="row" explicitly if a TableHead is ever used as a row header.
+  scope = "col",
+  ...props
+}: React.ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
+      scope={scope}
       className={cn(
         "text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className

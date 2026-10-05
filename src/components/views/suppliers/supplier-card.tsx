@@ -49,7 +49,7 @@ export function SupplierCard({
           onOpen()
         }
       }}
-      className="h-full cursor-pointer gap-0 py-0 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+      className="h-full cursor-pointer gap-0 py-0 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
     >
       <CardContent className="flex h-full flex-col p-4">
         {/* Name + contact */}

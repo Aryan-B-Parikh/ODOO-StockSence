@@ -187,7 +187,7 @@ export function AdjustmentDetailDialog({
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={pending}>
+                <Button className="bg-emerald-700 text-white hover:bg-emerald-800" disabled={pending}>
                   {pending ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : (
@@ -207,7 +207,7 @@ export function AdjustmentDetailDialog({
                 <AlertDialogFooter>
                   <AlertDialogCancel>Not yet</AlertDialogCancel>
                   <AlertDialogAction
-                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                    className="bg-emerald-700 text-white hover:bg-emerald-800"
                     onClick={() => act.mutate('approve')}
                   >
                     Approve &amp; post

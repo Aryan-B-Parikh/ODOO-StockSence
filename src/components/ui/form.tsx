@@ -147,7 +147,12 @@ function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
     <p
       data-slot="form-message"
       id={formMessageId}
-      className={cn("text-destructive text-sm", className)}
+      // The node mounts only once a validation error exists, so without a live
+      // region role assistive tech would never be told the error appeared —
+      // aria-describedby on the control only surfaces it when the field is
+      // re-focused (WCAG 4.1.3 Status Messages).
+      role={error ? 'alert' : undefined}
+      className={cn('text-destructive text-sm', className)}
       {...props}
     >
       {body}

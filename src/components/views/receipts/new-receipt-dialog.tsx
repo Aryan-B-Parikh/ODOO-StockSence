@@ -671,10 +671,14 @@ export function NewReceiptDialog({
                 <Plus className="size-3.5" aria-hidden="true" /> Add line
               </Button>
               {form.formState.errors.lines?.root && (
-                <p className="text-xs text-destructive">{form.formState.errors.lines.root.message}</p>
+                <p role="alert" className="text-xs text-destructive">
+                  {form.formState.errors.lines.root.message}
+                </p>
               )}
               {form.formState.errors.lines?.message && (
-                <p className="text-xs text-destructive">{form.formState.errors.lines.message}</p>
+                <p role="alert" className="text-xs text-destructive">
+                  {form.formState.errors.lines.message}
+                </p>
               )}
             </fieldset>
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { LockKeyhole, Menu, RefreshCw, ScanLine, WifiOff } from 'lucide-react'
+import { LockKeyhole, Mail, Menu, RefreshCw, ScanLine, WifiOff } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -14,6 +14,7 @@ import { useOfflineStore } from '@/stores/offline-store'
 import { useScanStore } from '@/stores/scan-store'
 import { useUIStore } from '@/stores/ui-store'
 
+import { MailInboxSheet } from './mail-inbox-sheet'
 import { NAV_BY_VIEW } from './nav'
 import { SetPinDialog } from './pin-lock'
 import { ScanDialog } from './scan-dialog'
@@ -25,6 +26,7 @@ export function Topbar() {
   const view = useUIStore((s) => s.view)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [setPinOpen, setSetPinOpen] = useState(false)
+  const [mailOpen, setMailOpen] = useState(false)
   const queryClient = useQueryClient()
   const fetchingCount = useIsFetching()
 
@@ -163,6 +165,27 @@ export function Topbar() {
       >
         <RefreshCw className={cn('size-4', fetchingCount > 0 && 'animate-spin')} />
       </Button>
+
+      {/* Outbound mail dispatches & notification hub */}
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9 shrink-0"
+              onClick={() => setMailOpen(true)}
+              aria-label="Notification Hub & Email Dispatch Log"
+            >
+              <Mail className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Notification Hub & Email Audit</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      {/* Outbound mail audit sheet */}
+      <MailInboxSheet open={mailOpen} onOpenChange={setMailOpen} />
 
       {/* First-time flow: set a PIN, then the screen locks */}
       <SetPinDialog open={setPinOpen} onOpenChange={setSetPinOpen} onPinSet={lock} />

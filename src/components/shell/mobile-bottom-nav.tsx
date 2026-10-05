@@ -90,6 +90,7 @@ export function MobileBottomNav() {
           <button
             type="button"
             onClick={() => handleSelect('dashboard')}
+            aria-current={currentView === 'dashboard' ? 'page' : undefined}
             className={cn(
               'flex flex-col items-center justify-center gap-1 py-1.5 transition-colors',
               currentView === 'dashboard'
@@ -110,6 +111,7 @@ export function MobileBottomNav() {
               triggerHaptic()
               setOpsOpen(true)
             }}
+            aria-current={isOpsActive ? 'page' : undefined}
             className={cn(
               'flex flex-col items-center justify-center gap-1 py-1.5 transition-colors',
               isOpsActive ? 'text-primary font-medium' : 'text-muted-foreground hover:text-foreground'
@@ -129,13 +131,13 @@ export function MobileBottomNav() {
             <button
               type="button"
               onClick={handleScan}
-              className="group relative -top-3.5 flex size-13 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-lg shadow-emerald-500/35 transition-transform active:scale-95"
+              className="group relative -top-3.5 flex size-13 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-700 to-teal-600 text-white shadow-lg shadow-emerald-500/35 transition-transform active:scale-95"
               aria-label="Scan barcode or QR code"
             >
               <ScanLine className="size-6 stroke-[2.2] transition-transform group-hover:scale-110" />
               <span className="absolute inset-0 rounded-2xl ring-2 ring-white/25" />
             </button>
-            <span className="-mt-2.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+            <span className="-mt-2.5 text-[10px] font-semibold text-primary">
               SCAN
             </span>
           </div>
@@ -144,6 +146,7 @@ export function MobileBottomNav() {
           <button
             type="button"
             onClick={() => handleSelect('products')}
+            aria-current={currentView === 'products' ? 'page' : undefined}
             className={cn(
               'flex flex-col items-center justify-center gap-1 py-1.5 transition-colors',
               currentView === 'products'
@@ -164,6 +167,7 @@ export function MobileBottomNav() {
               triggerHaptic()
               setMoreOpen(true)
             }}
+            aria-current={isMoreActive ? 'page' : undefined}
             className={cn(
               'flex flex-col items-center justify-center gap-1 py-1.5 transition-colors',
               isMoreActive ? 'text-primary font-medium' : 'text-muted-foreground hover:text-foreground'
@@ -196,6 +200,7 @@ export function MobileBottomNav() {
                   key={item.key}
                   type="button"
                   onClick={() => handleSelect(item.key)}
+                  aria-current={active ? 'page' : undefined}
                   className={cn(
                     'flex w-full items-center justify-between rounded-2xl border p-3 text-left transition-colors',
                     active
@@ -236,6 +241,7 @@ export function MobileBottomNav() {
                   key={item.key}
                   type="button"
                   onClick={() => handleSelect(item.key)}
+                  aria-current={active ? 'page' : undefined}
                   className={cn(
                     'flex w-full items-center justify-between rounded-2xl border p-3 text-left transition-colors',
                     active

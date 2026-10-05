@@ -367,10 +367,15 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
             placeholder="e.g. Damage found during cycle count of Rack B1"
             rows={2}
             aria-invalid={reasonIssue !== null && reasonTouched}
+            aria-describedby={reasonIssue && reasonTouched ? 'adj-reason-error' : undefined}
             required
             className={cn('transition-all duration-500', voiceHighlight.reason && 'border-teal-500/50 ring-2 ring-teal-500/60')}
           />
-          {reasonIssue && reasonTouched && <p className="text-xs font-medium text-red-600">{reasonIssue}</p>}
+          {reasonIssue && reasonTouched && (
+            <p id="adj-reason-error" role="alert" className="text-xs font-medium text-red-600">
+              {reasonIssue}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -461,11 +466,25 @@ export function NewAdjustmentDialog({ open, onOpenChange }: { open: boolean; onO
                       onChange={(e) => updateLine(line.key, { countedQty: e.target.value })}
                       placeholder="What you counted"
                       aria-invalid={line.countedQty !== '' && !lineValid(line)}
+                      aria-describedby={
+                        line.countedQty !== '' && !lineValid(line) ? `counted-${line.key}-error` : undefined
+                      }
                       className={cn(
                         'transition-all duration-500',
                         i === 0 && voiceHighlight.qty && 'border-teal-500/50 ring-2 ring-teal-500/60'
                       )}
                     />
+                    {line.countedQty !== '' && !lineValid(line) && (
+                      <p
+                        id={`counted-${line.key}-error`}
+                        role="alert"
+                        className="text-[11px] font-medium text-red-600"
+                      >
+                        {line.productId == null || line.locationId == null
+                          ? 'Choose a product and location for this line.'
+                          : 'Counted quantity must be a whole number of 0 or more.'}
+                      </p>
+                    )}
                   </div>
                   <Button
                     type="button"

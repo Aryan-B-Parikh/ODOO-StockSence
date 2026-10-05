@@ -583,7 +583,11 @@ export function ScanDialog() {
               </div>
             </div>
 
-            <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
+            {/* Offscreen decode buffer. `hidden` (display:none) keeps it out of
+                the a11y tree and the tab order; it carries a name purely so the
+                control-has-associated-label rule stays quiet — aria-hidden on it
+                would trip no-aria-hidden-on-focusable instead. */}
+            <canvas ref={canvasRef} className="hidden" aria-label="Offscreen image decode buffer" />
           </TabsContent>
 
           {/* ── Manual tab (the guaranteed fallback) ── */}
