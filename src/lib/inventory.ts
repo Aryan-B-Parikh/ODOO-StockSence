@@ -17,6 +17,7 @@
  */
 
 import { db } from '@/lib/db'
+import { computeDemandForecasts, type DemandForecast } from '@/lib/forecast'
 import { HttpError } from '@/lib/http'
 import type { Prisma, PrismaClient } from '@prisma/client'
 
@@ -751,13 +752,16 @@ export interface ProductNeed {
   inTransit: number
   projectedAvailable: number
   reorderPoint: number
-  dailyUsage: number
+  dailyUsage: number // forecasted demand handed to the reorder math
+  planDailyUsage: number // the editable planning figure (Product.dailyUsage)
+  forecast: DemandForecast // provenance of dailyUsage (real ledger history)
   safetyStock: number
   belowReorder: boolean
   stockoutRisk: boolean
 }
 
 export async function computeNeeds(tx: Tx = db): Promise<ProductNeed[]> {
+  const forecasts = await computeDemandForecasts(tx)
   const products = await tx.product.findMany({
     where: { active: true },
     include: { stocks: true, suppliers: { include: { supplier: true } } },
@@ -769,6 +773,18 @@ export async function computeNeeds(tx: Tx = db): Promise<ProductNeed[]> {
     const incoming = p.stocks.reduce((a, s) => a + s.incoming, 0)
     const inTransit = p.stocks.reduce((a, s) => a + s.inTransit, 0)
     const projectedAvailable = Math.round((onHand + incoming - reserved) * 1000) / 1000
+    const forecast =
+      forecasts.get(p.id) ?? {
+        productId: p.id,
+        planDaily: p.dailyUsage,
+        dailyUsage: p.dailyUsage,
+        observedDaily: 0,
+        unitsOut: 0,
+        deliveries: 0,
+        windowDays: 28,
+        measured: false,
+        method: 'No delivery history — using the planning figure',
+      }
     return {
       productId: p.id,
       sku: p.sku,
@@ -781,7 +797,9 @@ export async function computeNeeds(tx: Tx = db): Promise<ProductNeed[]> {
       inTransit,
       projectedAvailable,
       reorderPoint: p.reorderPoint,
-      dailyUsage: p.dailyUsage,
+      dailyUsage: forecast.dailyUsage,
+      planDailyUsage: p.dailyUsage,
+      forecast,
       safetyStock: p.safetyStock,
       belowReorder: projectedAvailable < p.reorderPoint,
       stockoutRisk: projectedAvailable <= p.safetyStock,
@@ -793,8 +811,13 @@ export function buildReorderReason(need: ProductNeed, supplierName: string | nul
   const u = need.unit
   const lead = supplierName ? `${supplierName}'s ${leadDays}-day lead time` : `a ${leadDays}-day lead time`
   const moq = minOrderQty > 0 ? ` (MOQ ${minOrderQty} ${u}, order multiple ${orderMultiple} ${u})` : orderMultiple > 1 ? ` (order multiple ${orderMultiple} ${u})` : ''
+  const f = need.forecast
+  const demandLine = f?.measured
+    ? `Demand: ${need.dailyUsage} ${u}/day (measured) — ${f.unitsOut} ${u} left on ${f.deliveries} deliveries in ${f.windowDays}d; plan ${need.planDailyUsage} ${u}/day\n`
+    : `Demand: ${need.dailyUsage} ${u}/day (plan) — no deliveries recorded in the last ${f?.windowDays ?? 28}d\n`
   return (
     `On-hand: ${need.onHand} ${u} · Reserved: ${need.reserved} ${u} · Incoming: ${need.incoming} ${u} · Available: ${need.projectedAvailable} ${u}\n` +
+    demandLine +
     `Reorder point: ${need.reorderPoint} ${u} (${need.dailyUsage} ${u}/day × ${leadDays}-day lead time + ${need.safetyStock} ${u} safety stock)\n` +
     `→ Reorder recommended: projected available stock (${need.projectedAvailable} ${u}) is below the ${need.reorderPoint} ${u} reorder point within ${lead}.\n` +
     `→ Suggested quantity: ${suggestedQty} ${u}${moq}` +

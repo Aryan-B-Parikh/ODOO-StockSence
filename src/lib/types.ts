@@ -95,17 +95,33 @@ export interface SupplierProductLinkDTO {
   orderMultiple: number
 }
 
+/**
+ * Measured supplier performance, computed from that supplier's real receipt
+ * history (on-time = received on/before the expected date; damage = damaged
+ * units ÷ received units from the immutable ledger). Distinct from the
+ * editable `reliability`/`damageRate` plan fields so the form keeps working.
+ */
+export interface SupplierScorecardDTO {
+  receipts: number // received receipts counted
+  onTimeRate: number | null // 0-1, null until there is history
+  damageRate: number | null // 0-1, null until there is history
+  avgLeadDays: number | null // PO created → received, averaged
+  measured: boolean // true when at least one received receipt exists
+  basis: string // human-readable provenance
+}
+
 /** Full supplier record with its linked products and link economics. */
 export interface SupplierDTO {
   id: number
   name: string
   contact: string | null
   leadTimeDays: number
-  reliability: number // on-time delivery rate 0-1
-  damageRate: number // fraction of goods damaged 0-1
+  reliability: number // on-time delivery rate 0-1 (editable plan/estimate)
+  damageRate: number // fraction of goods damaged 0-1 (editable plan/estimate)
   notes: string | null
   productCount: number
   products: SupplierProductLinkDTO[]
+  scorecard: SupplierScorecardDTO
 }
 
 // ---------- Receipts ----------
@@ -307,6 +323,20 @@ export interface CountListDTO {
 
 // ---------- Reorder (Phase 3) ----------
 
+/**
+ * Demand forecast derived from the immutable ledger: units that physically
+ * left the warehouse on delivered/packed orders inside the rolling window,
+ * blended with the editable planning figure. Not a heuristic — real history.
+ */
+export interface DemandForecastDTO {
+  observedDaily: number // measured units/day from real delivery outflows
+  unitsOut: number // total units shipped inside the window
+  deliveries: number // number of delivery outflow events observed
+  windowDays: number
+  measured: boolean // true when at least one delivery was observed
+  method: string // plain-language provenance of the figure
+}
+
 export interface ReorderSuggestionDTO {
   id: number
   productId: number
@@ -319,7 +349,9 @@ export interface ReorderSuggestionDTO {
   incoming: number
   projectedAvailable: number
   reorderPoint: number
-  dailyUsage: number
+  dailyUsage: number // forecasted demand used by the engine
+  planDailyUsage: number // the editable planning figure (Product.dailyUsage)
+  forecast: DemandForecastDTO | null
   safetyStock: number
   suggestedQty: number
   preferredName: string
