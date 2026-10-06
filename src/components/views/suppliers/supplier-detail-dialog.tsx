@@ -180,9 +180,22 @@ export function SupplierDetailDialog({
 
   const preferredCount = supplier?.products.filter((p) => p.preferred).length ?? 0
 
+  // Performance shown here is measured from real receipts when available;
+  // the editable fields remain the fallback estimate for new suppliers.
+  const scorecard = supplier?.scorecard
+  const measured = scorecard?.measured === true
+  const reliability =
+    measured && scorecard?.onTimeRate != null ? scorecard.onTimeRate : supplier?.reliability ?? 0
+  const damageRate =
+    measured && scorecard?.damageRate != null ? scorecard.damageRate : supplier?.damageRate ?? 0
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent aria-describedby={undefined} className="max-h-[88vh] max-w-3xl overflow-y-auto">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-h-[88vh] overflow-y-auto"
+        style={{ width: 'min(48rem, calc(100vw - 2rem))', maxWidth: 'none' }}
+      >
         {query.isPending && (
           <div className="space-y-4" aria-busy="true" aria-label="Loading supplier">
             <DialogTitle className="sr-only">Loading supplier</DialogTitle>
@@ -213,7 +226,7 @@ export function SupplierDetailDialog({
         )}
 
         {supplier && (
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             {/* Header */}
             <DialogHeader className="space-y-1.5">
               <DialogTitle asChild>
@@ -240,25 +253,29 @@ export function SupplierDetailDialog({
               <StatTile
                 label="Lead time"
                 value={`${supplier.leadTimeDays} ${supplier.leadTimeDays === 1 ? 'day' : 'days'}`}
-                caption="PO → dock"
+                caption={
+                  measured && scorecard?.avgLeadDays != null
+                    ? `planned · measured ${scorecard.avgLeadDays}d`
+                    : 'PO → dock'
+                }
               />
               <StatTile
                 label="Reliability"
-                value={`${Math.round(supplier.reliability * 100)}%`}
+                value={`${Math.round(reliability * 100)}%`}
                 valueClass={
-                  supplier.reliability >= 0.95
+                  reliability >= 0.95
                     ? 'text-emerald-700 dark:text-emerald-400'
-                    : supplier.reliability >= 0.85
+                    : reliability >= 0.85
                       ? 'text-amber-700 dark:text-amber-400'
                       : 'text-red-600 dark:text-red-400'
                 }
-                caption="on-time arrivals"
+                caption={measured ? `measured · ${scorecard?.receipts} receipts` : 'estimate · on-time arrivals'}
               />
               <StatTile
                 label="Damage rate"
-                value={`${(supplier.damageRate * 100).toFixed(1)}%`}
-                valueClass={supplier.damageRate > 0.02 ? 'text-red-600 dark:text-red-400' : undefined}
-                caption="of received goods"
+                value={`${(damageRate * 100).toFixed(1)}%`}
+                valueClass={damageRate > 0.02 ? 'text-red-600 dark:text-red-400' : undefined}
+                caption={measured ? 'measured · of received' : 'estimate · of received'}
               />
               <StatTile label="Products linked" value={String(supplier.productCount)} caption="SKUs sourced here" />
               <StatTile label="Preferred for" value={String(preferredCount)} caption="of those SKUs" />
@@ -368,41 +385,74 @@ export function SupplierDetailDialog({
                     </li>
                   </ul>
                 ) : (
-                  /* Read mode: compact links table */
-                  <div className="overflow-x-auto">
-                    <Table className="min-w-[34rem]">
-                      <TableHeader>
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableHead className="pl-3">SKU</TableHead>
-                          <TableHead>Product</TableHead>
-                          <TableHead className="text-right">Cost</TableHead>
-                          <TableHead className="text-right">MOQ</TableHead>
-                          <TableHead className="text-right">×Multiple</TableHead>
-                          <TableHead className="pr-3 text-right">Preferred</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {supplier.products.map((p) => (
-                          <TableRow key={p.productId}>
-                            <TableCell className="pl-3 font-mono text-xs">{p.sku}</TableCell>
-                            <TableCell className="max-w-52 truncate text-xs" title={p.productName}>
-                              {p.productName}
-                            </TableCell>
-                            <TableCell className="text-right tabular">{fmtUSD(p.costPrice, 2)}<span className="ml-1 text-[10px] text-muted-foreground">/{p.unit}</span></TableCell>
-                            <TableCell className="text-right tabular">{fmtQty(p.minOrderQty)}</TableCell>
-                            <TableCell className="text-right tabular">×{fmtQty(p.orderMultiple)}</TableCell>
-                            <TableCell className="pr-3 text-right">
-                              {p.preferred ? (
-                                <Star className="ml-auto size-4 fill-amber-400 text-amber-400" aria-label="Preferred supplier" />
-                              ) : (
-                                <Star className="ml-auto size-4 text-muted-foreground/30" aria-hidden="true" />
-                              )}
-                            </TableCell>
+                  /* Read mode: cards on mobile, compact links table on sm+ */
+                  <>
+                    <ul className="space-y-2 md:hidden">
+                      {supplier.products.map((p) => (
+                        <li key={p.productId} className="rounded-lg border px-3 py-2.5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className="font-mono text-xs font-medium">{p.sku}</span>
+                              <p className="truncate text-sm" title={p.productName}>{p.productName}</p>
+                            </div>
+                            {p.preferred ? (
+                              <Star className="size-4 shrink-0 fill-amber-400 text-amber-400" aria-label="Preferred supplier" />
+                            ) : (
+                              <Star className="size-4 shrink-0 text-muted-foreground/30" aria-hidden="true" />
+                            )}
+                          </div>
+                          <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cost</dt>
+                              <dd className="tabular">{fmtUSD(p.costPrice, 2)}<span className="ml-1 text-[10px] text-muted-foreground">/{p.unit}</span></dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">MOQ</dt>
+                              <dd className="tabular">{fmtQty(p.minOrderQty)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">×Multiple</dt>
+                              <dd className="tabular">×{fmtQty(p.orderMultiple)}</dd>
+                            </div>
+                          </dl>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="hidden min-w-0 md:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/50 hover:bg-muted/50">
+                            <TableHead className="pl-3">SKU</TableHead>
+                            <TableHead>Product</TableHead>
+                            <TableHead className="text-right">Cost</TableHead>
+                            <TableHead className="text-right">MOQ</TableHead>
+                            <TableHead className="text-right">×Multiple</TableHead>
+                            <TableHead className="pr-3 text-right">Preferred</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        </TableHeader>
+                        <TableBody>
+                          {supplier.products.map((p) => (
+                            <TableRow key={p.productId}>
+                              <TableCell className="pl-3 font-mono text-xs">{p.sku}</TableCell>
+                              <TableCell className="max-w-52 truncate text-xs" title={p.productName}>
+                                {p.productName}
+                              </TableCell>
+                              <TableCell className="text-right tabular">{fmtUSD(p.costPrice, 2)}<span className="ml-1 text-[10px] text-muted-foreground">/{p.unit}</span></TableCell>
+                              <TableCell className="text-right tabular">{fmtQty(p.minOrderQty)}</TableCell>
+                              <TableCell className="text-right tabular">×{fmtQty(p.orderMultiple)}</TableCell>
+                              <TableCell className="pr-3 text-right">
+                                {p.preferred ? (
+                                  <Star className="ml-auto size-4 fill-amber-400 text-amber-400" aria-label="Preferred supplier" />
+                                ) : (
+                                  <Star className="ml-auto size-4 text-muted-foreground/30" aria-hidden="true" />
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>

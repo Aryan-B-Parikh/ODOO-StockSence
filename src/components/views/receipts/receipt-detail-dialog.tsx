@@ -146,7 +146,11 @@ export function ReceiptDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent aria-describedby={undefined} className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-h-[90vh] overflow-y-auto"
+        style={{ width: 'min(42rem, calc(100vw - 2rem))', maxWidth: 'none' }}
+      >
         <DialogHeader className="space-y-2">
           <DialogTitle asChild>
             <div className="flex flex-wrap items-center gap-2">
@@ -181,9 +185,58 @@ export function ReceiptDetailDialog({
           )}
         </DialogHeader>
 
-        {/* Lines */}
-        <section aria-label="Receipt lines">
-          <div className="overflow-hidden rounded-lg border">
+        {/* Lines — stacked cards on mobile, table on sm+ */}
+        <section aria-label="Receipt lines" className="min-w-0">
+          <ul className="space-y-2 md:hidden">
+            {receipt.lines.map((line) => {
+              const variance =
+                line.receivedQty != null ? line.receivedQty - line.expectedQty : null
+              return (
+                <li key={line.id} className="rounded-lg border px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs font-medium">{line.sku}</div>
+                      <div className="truncate text-[11px] text-muted-foreground" title={line.productName}>
+                        {line.productName}
+                      </div>
+                      <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{line.locationPath}</div>
+                    </div>
+                    {variance != null ? (
+                      <span className={cn('shrink-0 text-xs font-semibold tabular', deltaColor(variance))}>
+                        {fmtSignedQty(variance, line.unit)}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-[11px] text-muted-foreground/60">pending</span>
+                    )}
+                  </div>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Expected</dt>
+                      <dd className="tabular">{fmtQty(line.expectedQty, line.unit)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Received</dt>
+                      <dd className="tabular">
+                        {line.receivedQty != null ? (
+                          <span>
+                            {fmtQty(line.receivedQty, line.unit)}
+                            {line.damagedQty != null && line.damagedQty > 0 && (
+                              <span className="ml-1 text-[10px] font-normal text-red-600 dark:text-red-400">
+                                incl. {fmtQty(line.damagedQty, line.unit)} damaged
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/60">—</span>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                </li>
+              )
+            })}
+          </ul>
+          <div className="hidden min-w-0 overflow-hidden rounded-lg border md:block">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">

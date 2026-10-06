@@ -132,8 +132,18 @@ export function SuggestionCard({ suggestion }: { suggestion: ReorderSuggestionDT
               valueClass={belowPoint ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}
             />
             <StatChip label="Reorder point" value={fmtQty(suggestion.reorderPoint, suggestion.unit)} />
-            <StatChip label="Daily usage" value={fmtQty(suggestion.dailyUsage, `${suggestion.unit}/day`)} />
+            <StatChip
+              label="Forecast usage"
+              value={fmtQty(suggestion.dailyUsage, `${suggestion.unit}/day`)}
+            />
           </div>
+
+          {/* Provenance of the demand figure — measured from the ledger when possible. */}
+          <p className="text-[11px] text-muted-foreground">
+            {suggestion.forecast?.measured
+              ? `Demand measured from ${suggestion.forecast.deliveries} deliveries (${fmtQty(suggestion.forecast.unitsOut, suggestion.unit)} shipped in ${suggestion.forecast.windowDays} days), blended with the ${fmtQty(suggestion.planDailyUsage, `${suggestion.unit}/day`)} plan.`
+              : `No deliveries recorded in the last ${suggestion.forecast?.windowDays ?? 28} days — using the ${fmtQty(suggestion.planDailyUsage, `${suggestion.unit}/day`)} planning figure.`}
+          </p>
 
           <div className="space-y-1">
             <div className="flex items-center justify-between text-[11px] text-muted-foreground">
