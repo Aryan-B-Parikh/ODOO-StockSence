@@ -18,6 +18,7 @@ import { CountsView } from './counts-view'
 import { HistoryView } from './history-view'
 import { AlertsView } from './alerts-view'
 import { ReorderView } from './reorder-view'
+import { UsersView } from './users-view'
 
 /**
  * View registry — maps every ui-store view key to its view component.
@@ -37,6 +38,7 @@ export const VIEW_COMPONENTS: Record<string, ComponentType> = {
   history: HistoryView,
   alerts: AlertsView,
   reorder: ReorderView,
+  users: UsersView,
 }
 
 function AccessDeniedView() {
@@ -66,9 +68,9 @@ function AccessDeniedView() {
 /** Renders the active view. Keyed by view so switching remounts (fresh motion + state). */
 export function ActiveView() {
   const view = useUIStore((s) => s.view)
-  const permissions = useAuthStore((s) => s.user?.permissions)
+  const user = useAuthStore((s) => s.user)
 
-  if (!canAccessView(permissions, view)) {
+  if (!canAccessView(user ?? undefined, view)) {
     return <AccessDeniedView />
   }
 

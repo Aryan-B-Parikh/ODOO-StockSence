@@ -61,7 +61,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <nav aria-label="Primary" className="min-h-0 flex-1 space-y-4 overflow-y-auto px-2 py-3">
         {NAV_SECTIONS.map((section) => {
           const visibleItems = section.items.filter((item) =>
-            canAccessView(user?.permissions, item.key)
+            canAccessView(user ?? undefined, item.key)
           )
           if (visibleItems.length === 0) return null
 

@@ -56,7 +56,7 @@ export function AppShell() {
   // Guard restricted views: if user lacks permission for the active view, redirect to dashboard.
   useEffect(() => {
     if (!user) return
-    if (!canAccessView(user.permissions, view)) {
+    if (!canAccessView(user, view)) {
       toast.error('Access restricted', {
         description: `Your role (${user.role}) does not have permission to access ${NAV_BY_VIEW[view]?.label ?? view}.`,
       })

@@ -14,6 +14,7 @@ export const VIEW_KEYS = [
   'history',
   'alerts',
   'reorder',
+  'users',
 ] as const
 
 export type ViewKey = (typeof VIEW_KEYS)[number]

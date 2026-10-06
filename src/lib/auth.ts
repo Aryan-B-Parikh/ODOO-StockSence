@@ -82,6 +82,15 @@ export async function requirePermission(action: PermissionAction): Promise<Sessi
   return user
 }
 
+/** Throws 401/403 unless the session user is an ADMINISTRATOR (Owner). */
+export async function requireAdmin(): Promise<SessionUser> {
+  const user = await requireUser()
+  if (user.role !== 'ADMINISTRATOR') {
+    throw new HttpError(403, 'Owner / Administrator privileges required to manage accounts.')
+  }
+  return user
+}
+
 export function sessionCookieOptions(expiresAt: Date, isSecure?: boolean) {
   return {
     httpOnly: true,

@@ -10,6 +10,7 @@ import {
   SlidersHorizontal,
   Truck,
   ScanLine,
+  Users,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -22,6 +23,7 @@ export interface NavItem {
   icon: LucideIcon
   subtitle: string
   requiredPermission?: PermissionAction
+  requiredRole?: string
 }
 
 /** Sidebar sections — shared by the desktop rail, the mobile sheet and the topbar. */
@@ -59,15 +61,42 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       },
     ],
   },
+  {
+    label: 'Administration',
+    items: [
+      {
+        key: 'users',
+        label: 'Team & Accounts',
+        icon: Users,
+        subtitle: 'Owner account provisioning & role management',
+        requiredRole: 'ADMINISTRATOR',
+      },
+    ],
+  },
 ]
 
 export const NAV_BY_VIEW: Record<ViewKey, NavItem> = Object.fromEntries(
   NAV_SECTIONS.flatMap((section) => section.items.map((item) => [item.key, item]))
 ) as Record<ViewKey, NavItem>
 
-/** Checks whether a set of user permissions can access a given view. */
-export function canAccessView(permissions: string[] | undefined, viewKey: ViewKey): boolean {
+/** Checks whether a user or their permissions can access a given view. */
+export function canAccessView(
+  userOrPermissions: { permissions?: string[]; role?: string } | string[] | undefined,
+  viewKey: ViewKey
+): boolean {
   const item = NAV_BY_VIEW[viewKey]
-  if (!item || !item.requiredPermission) return true
-  return Boolean(permissions?.includes(item.requiredPermission))
+  if (!item) return true
+
+  const role = Array.isArray(userOrPermissions) ? undefined : userOrPermissions?.role
+  const permissions = Array.isArray(userOrPermissions)
+    ? userOrPermissions
+    : userOrPermissions?.permissions
+
+  if (item.requiredRole && role !== item.requiredRole) {
+    return false
+  }
+  if (item.requiredPermission && !permissions?.includes(item.requiredPermission)) {
+    return false
+  }
+  return true
 }
