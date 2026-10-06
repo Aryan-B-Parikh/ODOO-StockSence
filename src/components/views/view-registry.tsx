@@ -1,6 +1,6 @@
 'use client'
 
-import { ShieldAlert } from 'lucide-react'
+import { Loader2, ShieldAlert } from 'lucide-react'
 import type { ComponentType } from 'react'
 
 import { canAccessView } from '@/components/shell/nav'
@@ -69,6 +69,15 @@ function AccessDeniedView() {
 export function ActiveView() {
   const view = useUIStore((s) => s.view)
   const user = useAuthStore((s) => s.user)
+  const status = useAuthStore((s) => s.status)
+
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-[300px] items-center justify-center">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   if (!canAccessView(user ?? undefined, view)) {
     return <AccessDeniedView />

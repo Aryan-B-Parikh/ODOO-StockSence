@@ -17,6 +17,7 @@ import {
   Siren,
   SlidersHorizontal,
   Truck,
+  Users,
   Moon,
   Sun,
 } from 'lucide-react'
@@ -43,6 +44,7 @@ const MORE_VIEWS: { key: ViewKey; label: string; desc: string; icon: typeof Sire
   { key: 'reorder', label: 'Reorder Intelligence', desc: 'AI & rule-based replenishment suggestions', icon: ShoppingCart, color: 'text-emerald-500 bg-emerald-500/10' },
   { key: 'suppliers', label: 'Suppliers Directory', desc: 'Lead times, minimums & vendor metrics', icon: Building2, color: 'text-stone-400 bg-stone-500/10' },
   { key: 'history', label: 'Movement Ledger', desc: 'Immutable audit trail of every stock change', icon: ScrollText, color: 'text-indigo-400 bg-indigo-500/10' },
+  { key: 'users', label: 'Team & Accounts', desc: 'Owner staff & manager provisioning', icon: Users, color: 'text-purple-400 bg-purple-500/10' },
 ]
 
 function triggerHaptic() {
@@ -67,8 +69,8 @@ export function MobileBottomNav() {
   const { theme, setTheme } = useTheme()
 
   const user = useAuthStore((s) => s.user)
-  const visibleOpsViews = OPS_VIEWS.filter((v) => canAccessView(user?.permissions, v.key))
-  const visibleMoreViews = MORE_VIEWS.filter((v) => canAccessView(user?.permissions, v.key))
+  const visibleOpsViews = OPS_VIEWS.filter((v) => canAccessView(user ?? undefined, v.key))
+  const visibleMoreViews = MORE_VIEWS.filter((v) => canAccessView(user ?? undefined, v.key))
 
   const isOpsActive = visibleOpsViews.some((v) => v.key === currentView)
   const isMoreActive = visibleMoreViews.some((v) => v.key === currentView)

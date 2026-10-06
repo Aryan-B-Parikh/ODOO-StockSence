@@ -38,7 +38,7 @@ export function AttentionPanel({ attention }: { attention: AttentionDTO }) {
   const setView = useUIStore((s) => s.setView)
   const user = useAuthStore((s) => s.user)
   const items = [...attention.items]
-    .filter((i) => canAccessView(user?.permissions, i.href as ViewKey))
+    .filter((i) => canAccessView(user ?? undefined, i.href as ViewKey))
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
 
   const hasRed = items.some((i) => i.severity === 'red')

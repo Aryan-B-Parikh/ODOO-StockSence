@@ -92,9 +92,18 @@ export function canAccessView(
     ? userOrPermissions
     : userOrPermissions?.permissions
 
-  if (item.requiredRole && role !== item.requiredRole) {
-    return false
+  // Master Owner / Administrator has universal unrestricted access to ALL views
+  const normalizedRole = role?.trim().toUpperCase()
+  if (normalizedRole === 'ADMINISTRATOR' || normalizedRole === 'OWNER') {
+    return true
   }
+
+  if (item.requiredRole) {
+    if (!normalizedRole || normalizedRole !== item.requiredRole.trim().toUpperCase()) {
+      return false
+    }
+  }
+
   if (item.requiredPermission && !permissions?.includes(item.requiredPermission)) {
     return false
   }
