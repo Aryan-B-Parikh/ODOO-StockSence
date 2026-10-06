@@ -113,10 +113,10 @@ export function UsersView() {
         actions={
           <Button
             onClick={() => setCreateOpen(true)}
-            className="gap-2 bg-primary text-primary-foreground shadow-sm"
+            className="gap-2 bg-primary font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 cursor-pointer"
           >
             <UserPlus className="size-4" />
-            Provision New Account
+            Create User
           </Button>
         }
       />
@@ -142,31 +142,52 @@ export function UsersView() {
           </div>
           <div className="mt-0.5 text-[11px] text-muted-foreground">Floor operations</div>
         </div>
-        <div className="rounded-xl border bg-card p-3.5 shadow-sm">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Direct Sign-up</div>
-          <div className="mt-1 text-lg font-bold tracking-tight text-amber-600 dark:text-amber-400">Disabled</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">Owner provisioned only</div>
+        <div className="rounded-xl border bg-card p-3.5 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Direct Sign-up</div>
+            <div className="mt-1 text-base font-bold tracking-tight text-amber-600 dark:text-amber-400">Disabled</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">Owner provisioned only</div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            className="mt-2.5 h-7 w-full gap-1.5 border-primary/30 text-xs font-semibold text-primary hover:bg-primary/10 cursor-pointer"
+          >
+            <UserPlus className="size-3.5" />
+            + Create Account
+          </Button>
         </div>
       </div>
 
       {/* Users table card */}
       <Card className="shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <div>
             <CardTitle className="text-base font-semibold">Active Team Roster</CardTitle>
             <CardDescription className="text-xs">
               Every staff member operates under strictly scoped permissions. Passwords can be reset directly by the owner.
             </CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void refetch()}
-            className="size-8 p-0"
-            aria-label="Refresh team list"
-          >
-            <RotateCcw className="size-3.5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setCreateOpen(true)}
+              size="sm"
+              className="gap-1.5 bg-primary text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 cursor-pointer"
+            >
+              <UserPlus className="size-3.5" />
+              Create User
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void refetch()}
+              className="size-8 p-0 cursor-pointer"
+              aria-label="Refresh team list"
+            >
+              <RotateCcw className="size-3.5" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {isPending && (
