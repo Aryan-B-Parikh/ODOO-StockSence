@@ -24,9 +24,11 @@ import { useTheme } from 'next-themes'
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 import { useLockStore } from '@/stores/lock-store'
 import { useScanStore } from '@/stores/scan-store'
 import { useUIStore, type ViewKey } from '@/stores/ui-store'
+import { canAccessView } from './nav'
 
 const OPS_VIEWS: { key: ViewKey; label: string; desc: string; icon: typeof Truck; color: string }[] = [
   { key: 'receipts', label: 'Inbound Receipts', desc: 'Expected & received deliveries', icon: Truck, color: 'text-amber-500 bg-amber-500/10' },
@@ -64,8 +66,12 @@ export function MobileBottomNav() {
   const [moreOpen, setMoreOpen] = useState(false)
   const { theme, setTheme } = useTheme()
 
-  const isOpsActive = OPS_VIEWS.some((v) => v.key === currentView)
-  const isMoreActive = MORE_VIEWS.some((v) => v.key === currentView)
+  const user = useAuthStore((s) => s.user)
+  const visibleOpsViews = OPS_VIEWS.filter((v) => canAccessView(user?.permissions, v.key))
+  const visibleMoreViews = MORE_VIEWS.filter((v) => canAccessView(user?.permissions, v.key))
+
+  const isOpsActive = visibleOpsViews.some((v) => v.key === currentView)
+  const isMoreActive = visibleMoreViews.some((v) => v.key === currentView)
 
   const handleSelect = (key: ViewKey) => {
     triggerHaptic()
@@ -192,7 +198,7 @@ export function MobileBottomNav() {
             <SheetTitle className="text-base font-semibold">Warehouse Operations</SheetTitle>
           </SheetHeader>
           <div className="grid gap-2">
-            {OPS_VIEWS.map((item) => {
+            {visibleOpsViews.map((item) => {
               const Icon = item.icon
               const active = currentView === item.key
               return (
@@ -233,7 +239,7 @@ export function MobileBottomNav() {
             <SheetTitle className="text-base font-semibold">Intelligence & Management</SheetTitle>
           </SheetHeader>
           <div className="grid gap-2">
-            {MORE_VIEWS.map((item) => {
+            {visibleMoreViews.map((item) => {
               const Icon = item.icon
               const active = currentView === item.key
               return (

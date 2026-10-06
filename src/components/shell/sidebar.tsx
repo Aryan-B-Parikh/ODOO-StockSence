@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { useUIStore } from '@/stores/ui-store'
 
-import { NAV_SECTIONS, type NavItem } from './nav'
+import { NAV_SECTIONS, canAccessView, type NavItem } from './nav'
 
 /** Desktop rail — sticky, w-60, hidden on mobile (mobile uses the topbar Sheet). */
 export function Sidebar() {
@@ -59,18 +59,25 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       {/* Navigation */}
       <nav aria-label="Primary" className="min-h-0 flex-1 space-y-4 overflow-y-auto px-2 py-3">
-        {NAV_SECTIONS.map((section) => (
-          <div key={section.label}>
-            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {section.label}
+        {NAV_SECTIONS.map((section) => {
+          const visibleItems = section.items.filter((item) =>
+            canAccessView(user?.permissions, item.key)
+          )
+          if (visibleItems.length === 0) return null
+
+          return (
+            <div key={section.label}>
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {section.label}
+              </div>
+              <ul className="space-y-0.5">
+                {visibleItems.map((item) => (
+                  <SidebarLink key={item.key} item={item} onNavigate={onNavigate} />
+                ))}
+              </ul>
             </div>
-            <ul className="space-y-0.5">
-              {section.items.map((item) => (
-                <SidebarLink key={item.key} item={item} onNavigate={onNavigate} />
-              ))}
-            </ul>
-          </div>
-        ))}
+          )
+        })}
       </nav>
 
       {/* User card */}

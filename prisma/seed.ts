@@ -52,11 +52,13 @@ async function main() {
 
   // ------------------------------------------------------------------ users
   console.log('— users…')
-  const [mia, dev, sam] = await Promise.all([
+  const [owner, mia, dev, sam] = await Promise.all([
+    db.user.create({ data: { email: 'owner@stocksense.app', name: 'Owner (Executive)', passwordHash: hash('Owner123!'), role: 'ADMINISTRATOR', permissions: JSON.stringify([...PERMISSION_ACTIONS]) } }),
     db.user.create({ data: { email: 'manager@stocksense.app', name: 'Mia Torres', passwordHash: hash('Manager123!'), role: 'INVENTORY_MANAGER', permissions: JSON.stringify([...PERMISSION_ACTIONS]) } }),
     db.user.create({ data: { email: 'staff@stocksense.app', name: 'Dev Patel', passwordHash: hash('Staff123!'), role: 'WAREHOUSE_STAFF', permissions: JSON.stringify(['receive', 'pick', 'pack', 'transfer', 'count', 'adjust']) } }),
     db.user.create({ data: { email: 'sam@stocksense.app', name: 'Sam Reyes', passwordHash: hash('Staff123!'), role: 'WAREHOUSE_STAFF', permissions: JSON.stringify(['receive', 'pick', 'pack', 'transfer', 'count', 'adjust']) } }),
   ])
+  void owner
   void mia
 
   // -------------------------------------------------------- location tree

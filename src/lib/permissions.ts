@@ -23,7 +23,7 @@ export type PermissionAction = (typeof PERMISSION_ACTIONS)[number]
 export const ROLE_LABELS: Record<string, string> = {
   WAREHOUSE_STAFF: 'Warehouse Staff',
   INVENTORY_MANAGER: 'Inventory Manager',
-  ADMINISTRATOR: 'Administrator',
+  ADMINISTRATOR: 'Owner / Administrator',
 }
 
 export const ROLE_DEFAULTS: Record<string, PermissionAction[]> = {

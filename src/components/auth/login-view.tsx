@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { motion } from 'framer-motion'
-import { CheckCircle2, KeyRound, Loader2, LockKeyhole, LogIn, Mail, Package, ShieldCheck, User, WifiOff } from 'lucide-react'
+import { CheckCircle2, Crown, KeyRound, Loader2, LockKeyhole, LogIn, Mail, Package, ShieldCheck, WifiOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -32,25 +32,25 @@ type LoginValues = z.infer<typeof loginSchema>
 
 const DEMO_ACCOUNTS = [
   {
+    label: 'Owner — Master Executive',
+    email: 'owner@stocksense.app',
+    password: 'Owner123!',
+    icon: Crown,
+    hint: 'full master access · system owner',
+  },
+  {
     label: 'Manager — Mia Torres',
     email: 'manager@stocksense.app',
     password: 'Manager123!',
     icon: ShieldCheck,
-    hint: 'all permissions',
+    hint: 'supervision · reorder & approvals',
   },
   {
     label: 'Warehouse Staff — Dev Patel',
     email: 'staff@stocksense.app',
     password: 'Staff123!',
     icon: Package,
-    hint: 'operations',
-  },
-  {
-    label: 'Sam Reyes — anomaly demo',
-    email: 'sam@stocksense.app',
-    password: 'Staff123!',
-    icon: User,
-    hint: 'flags & review',
+    hint: 'floor operations · receipts & moves',
   },
 ]
 
@@ -168,16 +168,28 @@ export function LoginView() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Password reset failed')
-      toast.success('Password updated successfully', {
-        description: 'You can now sign in with your new password.',
-      })
+
+      toast.success('Password updated successfully! Signing you in...')
       setValue('email', resetEmail)
       setValue('password', resetNewPassword)
       setForgotOpen(false)
       setOtpSent(false)
+      const targetEmail = resetEmail
+      const targetPassword = resetNewPassword
       setResetOtp('')
       setResetNewPassword('')
       setDebugOtp(null)
+
+      try {
+        await login(targetEmail, targetPassword)
+        toast.success('Signed in successfully', {
+          description: 'Welcome back to Riverside Distribution Center.',
+        })
+      } catch {
+        toast.info('Password updated', {
+          description: 'Please sign in with your updated credentials.',
+        })
+      }
     } catch (err: unknown) {
       toast.error('Reset failed', {
         description: err instanceof Error ? err.message : 'Invalid or expired code',
@@ -456,6 +468,9 @@ export function LoginView() {
                 </button>
               ))}
             </div>
+            <div className="rounded-lg border border-dashed border-border/80 bg-muted/40 p-2.5 text-center text-[11px] text-muted-foreground">
+              <span className="font-semibold text-foreground">Managed Access Only:</span> Direct user registration is disabled. Staff and manager accounts are provisioned by the administrator.
+            </div>
           </div>
 
           <p className="text-center text-[11px] text-muted-foreground">
@@ -486,13 +501,42 @@ export function LoginView() {
           {!otpSent ? (
             <form onSubmit={handleSendOtp} className="space-y-4 pt-2">
               <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-muted-foreground">Quick select account:</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setResetEmail('owner@stocksense.app')}
+                    className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[11px] font-medium text-purple-700 dark:text-purple-300 hover:bg-purple-500/20 cursor-pointer"
+                  >
+                    👑 Owner
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetEmail('manager@stocksense.app')}
+                    className="rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[11px] font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-500/20 cursor-pointer"
+                  >
+                    🛡️ Manager
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetEmail('staff@stocksense.app')}
+                    className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 cursor-pointer"
+                  >
+                    📦 Staff
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="reset-email" className="text-xs">Registered Email Address</Label>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="reset-email"
                     type="email"
-                    placeholder="manager@stocksense.app"
+                    placeholder="owner@stocksense.app"
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
                     className="pl-9"
@@ -520,11 +564,20 @@ export function LoginView() {
             <form onSubmit={handleResetPassword} className="space-y-4 pt-2">
               <div className="rounded-lg bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2 border border-emerald-500/20">
                 <CheckCircle2 className="size-4 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  Verification code dispatched to <strong>{resetEmail}</strong>.
+                <div className="min-w-0 flex-1">
+                  <div>
+                    Verification code dispatched to <strong>{resetEmail}</strong>.
+                  </div>
                   {debugOtp && (
-                    <div className="mt-1 font-mono text-[11px] text-emerald-700 dark:text-emerald-300">
-                      Debug OTP: <span className="font-bold underline cursor-pointer" onClick={() => setResetOtp(debugOtp)}>{debugOtp}</span> (click to autofill)
+                    <div className="mt-2 flex items-center justify-between rounded-md bg-emerald-500/20 px-2.5 py-1.5 font-mono text-[11px] text-emerald-900 dark:text-emerald-200">
+                      <span>Code: <strong className="tracking-widest">{debugOtp}</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => setResetOtp(debugOtp)}
+                        className="rounded bg-emerald-700 px-2 py-0.5 font-sans text-[10px] font-semibold text-white hover:bg-emerald-800 cursor-pointer"
+                      >
+                        Auto-fill Code
+                      </button>
                     </div>
                   )}
                 </div>

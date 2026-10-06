@@ -5,8 +5,10 @@ import { ChevronRight, PartyPopper, Siren } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { canAccessView } from '@/components/shell/nav'
 import type { AttentionDTO } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 import type { ViewKey } from '@/stores/ui-store'
 import { useUIStore } from '@/stores/ui-store'
 
@@ -34,7 +36,10 @@ const SEVERITY_RAIL: Record<string, string> = {
 /** Phase 4 action list — severity-ranked items, each links to its view. */
 export function AttentionPanel({ attention }: { attention: AttentionDTO }) {
   const setView = useUIStore((s) => s.setView)
-  const items = [...attention.items].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
+  const user = useAuthStore((s) => s.user)
+  const items = [...attention.items]
+    .filter((i) => canAccessView(user?.permissions, i.href as ViewKey))
+    .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
 
   const hasRed = items.some((i) => i.severity === 'red')
   const hasOrange = items.some((i) => i.severity === 'orange')

@@ -10,7 +10,14 @@ interface StoredOtp {
   attempts: number;
 }
 
-const otpStore = new Map<string, StoredOtp>();
+const globalForOtp = globalThis as unknown as {
+  __stocksense_otp_store?: Map<string, StoredOtp>;
+};
+
+const otpStore = globalForOtp.__stocksense_otp_store ?? new Map<string, StoredOtp>();
+if (process.env.NODE_ENV !== 'production') {
+  globalForOtp.__stocksense_otp_store = otpStore;
+}
 
 /** Wrong guesses allowed before the code is destroyed for good. */
 export const MAX_OTP_ATTEMPTS = 5;

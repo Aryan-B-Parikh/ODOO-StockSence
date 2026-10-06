@@ -2,6 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 
 import { ActiveView } from '@/components/views/view-registry'
 import { useOfflineAutoReplay } from '@/lib/offline-replay'
@@ -14,7 +15,7 @@ import { cn } from '@/lib/utils'
 import type { ProductListDTO } from '@/lib/types'
 
 import { AppFooter } from './footer'
-import { NAV_BY_VIEW } from './nav'
+import { NAV_BY_VIEW, canAccessView } from './nav'
 import { MobileBottomNav } from './mobile-bottom-nav'
 import { MobileInstallBanner } from './mobile-install-banner'
 import { OfflineBanner } from './offline-banner'
@@ -50,6 +51,18 @@ export function AppShell() {
   const locked = useLockStore((s) => s.locked)
   const initLock = useLockStore((s) => s.initLock)
   const view = useUIStore((s) => s.view)
+  const setView = useUIStore((s) => s.setView)
+
+  // Guard restricted views: if user lacks permission for the active view, redirect to dashboard.
+  useEffect(() => {
+    if (!user) return
+    if (!canAccessView(user.permissions, view)) {
+      toast.error('Access restricted', {
+        description: `Your role (${user.role}) does not have permission to access ${NAV_BY_VIEW[view]?.label ?? view}.`,
+      })
+      setView('dashboard')
+    }
+  }, [user, view, setView])
 
   const mainRef = useRef<HTMLElement>(null)
   const prevView = useRef<ViewKey | null>(null)

@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import type { PermissionAction } from '@/lib/permissions'
 import type { ViewKey } from '@/stores/ui-store'
 
 export interface NavItem {
@@ -20,6 +21,7 @@ export interface NavItem {
   label: string
   icon: LucideIcon
   subtitle: string
+  requiredPermission?: PermissionAction
 }
 
 /** Sidebar sections — shared by the desktop rail, the mobile sheet and the topbar. */
@@ -41,8 +43,20 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     label: 'Intelligence',
     items: [
       { key: 'history', label: 'Move History', icon: ScrollText, subtitle: 'Immutable ledger of every quantity change' },
-      { key: 'alerts', label: 'Alerts & Review', icon: Siren, subtitle: 'Severity-ranked exceptions and review flags' },
-      { key: 'reorder', label: 'Reorder', icon: ShoppingCart, subtitle: 'Explainable, supplier-aware purchase suggestions' },
+      {
+        key: 'alerts',
+        label: 'Alerts & Review',
+        icon: Siren,
+        subtitle: 'Severity-ranked exceptions and review flags',
+        requiredPermission: 'approve-adjustment',
+      },
+      {
+        key: 'reorder',
+        label: 'Reorder',
+        icon: ShoppingCart,
+        subtitle: 'Explainable, supplier-aware purchase suggestions',
+        requiredPermission: 'approve-reorder',
+      },
     ],
   },
 ]
@@ -50,3 +64,10 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
 export const NAV_BY_VIEW: Record<ViewKey, NavItem> = Object.fromEntries(
   NAV_SECTIONS.flatMap((section) => section.items.map((item) => [item.key, item]))
 ) as Record<ViewKey, NavItem>
+
+/** Checks whether a set of user permissions can access a given view. */
+export function canAccessView(permissions: string[] | undefined, viewKey: ViewKey): boolean {
+  const item = NAV_BY_VIEW[viewKey]
+  if (!item || !item.requiredPermission) return true
+  return Boolean(permissions?.includes(item.requiredPermission))
+}

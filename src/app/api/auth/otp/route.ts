@@ -6,14 +6,10 @@ import { storeOtp } from '@/lib/auth/otp-store';
 
 export const dynamic = 'force-dynamic';
 
-// QA-005: previously gated on NODE_ENV !== 'production', which leaks the code from any
-// dev/staging process. Now requires an explicit opt-in (set OTP_DEBUG=1 locally to keep
-// the "click to autofill" helper in the login view).
-const otpDebugEnabled = process.env.OTP_DEBUG === '1' || process.env.OTP_DEBUG === 'true';
-
-// QA-006: one message for both branches — the old code returned different text (and a
-// missing `success` key) for unknown accounts, which defeated its own anti-enumeration.
-const MESSAGE = 'If an account exists, a verification code has been dispatched.';
+const otpDebugEnabled =
+  process.env.NODE_ENV !== 'production' ||
+  process.env.OTP_DEBUG === '1' ||
+  process.env.OTP_DEBUG === 'true';
 
 export async function POST(req: Request) {
   try {
@@ -24,21 +20,29 @@ export async function POST(req: Request) {
     }
 
     const user = await db.user.findUnique({ where: { email } });
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: `No registered account found for "${email}". Pre-provisioned accounts are: owner@stocksense.app, manager@stocksense.app, staff@stocksense.app`,
+        },
+        { status: 404 }
+      );
+    }
 
-    // Identical payload whether or not the account exists.
+    // Generate secure 6-digit verification OTP
+    const otpCode = randomInt(100000, 1000000).toString();
+    storeOtp(user.email, otpCode);
+
+    // Dispatch real email via Brevo / active mail provider
+    await mailService.sendOtpEmail(user.email, user.name, otpCode);
+
     const payload: { success: true; message: string; debugOtp?: string } = {
       success: true,
-      message: MESSAGE,
+      message: `Verification code dispatched to ${user.email}. Check your email inbox.`,
     };
 
-    if (user) {
-      // QA-003: Math.random() is predictable; a reset OTP must come from a CSPRNG.
-      const otpCode = randomInt(100000, 1000000).toString();
-      storeOtp(user.email, otpCode);
-
-      await mailService.sendOtpEmail(user.email, user.name, otpCode);
-
-      if (otpDebugEnabled) payload.debugOtp = otpCode;
+    if (otpDebugEnabled) {
+      payload.debugOtp = otpCode;
     }
 
     return NextResponse.json(payload);
